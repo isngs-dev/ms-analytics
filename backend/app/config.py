@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from pydantic import field_validator
@@ -8,6 +9,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 _ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
 
 _DEFAULT_DB = "postgresql+psycopg://ms:change-me@localhost:5434/ms_analytics"
+_EXPECTED_PREFIXES = ("DATABASE", "DB_", "POSTGRES", "ENVIRONMENT", "JWT", "COOKIE", "DATA_SOURCE", "DRIVE",
+                      "SCHEDULER", "SYNC_", "GOOGLE", "PORT")
 _DEV_SECRET = "dev-only-change-me-dev-only-change-me"  # 37 bytes; production must override
 
 
@@ -44,9 +47,12 @@ class Settings(BaseSettings):
     def assert_safe(self) -> None:
         if self.environment == "production" and self.jwt_secret == _DEV_SECRET:
             raise RuntimeError("JWT_SECRET must be set in production")
-        if self.environment == "production" and self.database_url == _DEFAULT_DB:
+        hosted = self.environment == "production" or bool(os.environ.get("RENDER"))  # Render sets RENDER=true
+        if hosted and self.database_url == _DEFAULT_DB:
+            seen = sorted(k for k in os.environ if k.startswith(_EXPECTED_PREFIXES))  # names only, never values
             raise RuntimeError("DATABASE_URL is not set on this service: add it under Environment "
-                               "(on Render: the Internal Database URL of the database)")
+                               "(on Render: the Internal Database URL of the database). "
+                               f"Settings this service can see: {', '.join(seen) or 'none of ours'}")
 
 
 settings = Settings()

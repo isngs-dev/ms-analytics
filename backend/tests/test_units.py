@@ -211,3 +211,15 @@ def test_production_without_a_database_url_fails_with_a_clear_message():
     with pytest.raises(RuntimeError, match="DATABASE_URL is not set"):
         s.assert_safe()
     Settings(environment="production", jwt_secret="x" * 40, database_url="postgres://u:p@h/d").assert_safe()
+
+
+def test_render_without_a_database_url_names_the_settings_it_can_see(monkeypatch):
+    import pytest
+    from app.config import _DEFAULT_DB, Settings
+    monkeypatch.setenv("RENDER", "true")
+    monkeypatch.setenv("JWT_SECRET", "x" * 40)
+    monkeypatch.setenv("DB_URL_TYPO", "postgres://secret-value")
+    with pytest.raises(RuntimeError) as e:
+        Settings(database_url=_DEFAULT_DB).assert_safe()  # note: no ENVIRONMENT=production needed
+    msg = str(e.value)
+    assert "JWT_SECRET" in msg and "DB_URL_TYPO" in msg and "secret-value" not in msg
