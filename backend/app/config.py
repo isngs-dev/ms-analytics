@@ -7,6 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # repo's folder must not pick up that repo's .env. (Missing file is fine, e.g. inside Docker.)
 _ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
 
+_DEFAULT_DB = "postgresql+psycopg://ms:change-me@localhost:5434/ms_analytics"
 _DEV_SECRET = "dev-only-change-me-dev-only-change-me"  # 37 bytes; production must override
 
 
@@ -14,7 +15,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=_ENV_FILE, extra="ignore")
 
     environment: str = "development"  # development | production
-    database_url: str = "postgresql+psycopg://ms:change-me@localhost:5434/ms_analytics"
+    database_url: str = _DEFAULT_DB
     jwt_secret: str = _DEV_SECRET
     jwt_expire_minutes: int = 480
     cookie_secure: bool = False  # set true behind HTTPS
@@ -43,6 +44,9 @@ class Settings(BaseSettings):
     def assert_safe(self) -> None:
         if self.environment == "production" and self.jwt_secret == _DEV_SECRET:
             raise RuntimeError("JWT_SECRET must be set in production")
+        if self.environment == "production" and self.database_url == _DEFAULT_DB:
+            raise RuntimeError("DATABASE_URL is not set on this service: add it under Environment "
+                               "(on Render: the Internal Database URL of the database)")
 
 
 settings = Settings()

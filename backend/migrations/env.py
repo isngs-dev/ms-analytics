@@ -5,6 +5,7 @@ from app.config import settings
 from app.db import Base
 import app.models  # noqa: F401  (registers tables on Base.metadata)
 
+settings.assert_safe()  # fail with a readable message when production settings are missing
 config = context.config
 target_metadata = Base.metadata
 

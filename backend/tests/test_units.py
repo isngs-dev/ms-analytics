@@ -202,3 +202,12 @@ def test_database_url_from_a_hosting_platform_gets_the_psycopg_driver():
     assert Settings(database_url="postgres://u:p@h:5432/d").database_url == "postgresql+psycopg://u:p@h:5432/d"
     assert Settings(database_url="postgresql://u:p@h/d").database_url == "postgresql+psycopg://u:p@h/d"
     assert Settings(database_url="postgresql+psycopg://u:p@h/d").database_url == "postgresql+psycopg://u:p@h/d"
+
+
+def test_production_without_a_database_url_fails_with_a_clear_message():
+    import pytest
+    from app.config import _DEFAULT_DB, Settings
+    s = Settings(environment="production", jwt_secret="x" * 40, database_url=_DEFAULT_DB)
+    with pytest.raises(RuntimeError, match="DATABASE_URL is not set"):
+        s.assert_safe()
+    Settings(environment="production", jwt_secret="x" * 40, database_url="postgres://u:p@h/d").assert_safe()
