@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Anchor to this project's own .env, never the current working directory: running from another
@@ -29,6 +30,15 @@ class Settings(BaseSettings):
 
     sync_interval_minutes: int = 10  # polling Drive is cheap: only files whose modifiedTime changed are re-read
     scheduler_enabled: bool = False
+
+    @field_validator("database_url")
+    @classmethod
+    def _driver(cls, v: str) -> str:
+        """Hosting platforms (Render, Heroku ...) hand out `postgres://` / `postgresql://` URLs: use the psycopg 3 driver."""
+        for plain in ("postgres://", "postgresql://"):
+            if v.startswith(plain):
+                return "postgresql+psycopg://" + v[len(plain):]
+        return v
 
     def assert_safe(self) -> None:
         if self.environment == "production" and self.jwt_secret == _DEV_SECRET:

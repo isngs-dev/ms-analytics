@@ -2,7 +2,9 @@ import type { NextConfig } from "next";
 
 // The browser only talks to this origin; /api/* is proxied to the FastAPI service so the
 // httpOnly session cookie stays same-origin (no CORS, no token in JS).
-const API = process.env.API_INTERNAL_URL ?? "http://localhost:8020";
+// On Render this is "host:port" of the private API service, so a missing scheme is added.
+const rawApi = process.env.API_INTERNAL_URL ?? "http://localhost:8020";
+const API = /^https?:\/\//.test(rawApi) ? rawApi : `http://${rawApi}`;
 
 const config: NextConfig = {
   reactStrictMode: true,

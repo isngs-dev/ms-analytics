@@ -195,3 +195,10 @@ def test_blank_headers_and_title_row():
     v = ps.rows[0].values
     assert v["received_date"] == "1/2/2026" and v["edit_date"] == "1/2/2026"
     assert v["qc_status"] == "Client Finalized"
+
+
+def test_database_url_from_a_hosting_platform_gets_the_psycopg_driver():
+    from app.config import Settings
+    assert Settings(database_url="postgres://u:p@h:5432/d").database_url == "postgresql+psycopg://u:p@h:5432/d"
+    assert Settings(database_url="postgresql://u:p@h/d").database_url == "postgresql+psycopg://u:p@h/d"
+    assert Settings(database_url="postgresql+psycopg://u:p@h/d").database_url == "postgresql+psycopg://u:p@h/d"

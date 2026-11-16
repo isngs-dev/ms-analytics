@@ -133,6 +133,9 @@ session cookie stays same-origin. Put a TLS reverse proxy (Caddy, nginx, a cloud
 Create real users from **Admin > Users** (create the first admin with `python -m app.seed.users` and change or
 deactivate the demo accounts immediately). Back up the `pgdata` volume.
 
+## Render
+A ready-made Blueprint (`render.yaml`) and a step-by-step guide are in [docs/DEPLOY_RENDER.md](docs/DEPLOY_RENDER.md).
+
 ## Security notes
 - Session is an httpOnly cookie (also accepts a Bearer token); roles are read from the database on every request,
   so deactivating a user takes effect immediately. Passwords are PBKDF2-SHA256; login is rate limited per process.
