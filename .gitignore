@@ -1,0 +1,16 @@
+.env
+secrets/
+node_modules/
+.next/
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+pgdata/
+.env.local
+*.local
+tmp/
+*.tsbuildinfo
+*.log
+*.jsonl

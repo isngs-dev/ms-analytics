@@ -1,0 +1,103 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Theme: DARK PASTEL GREEN (default) with white text, and a white + pastel green light theme; red is the alert colour.
+   primary = pastel green (readable on the dark surfaces); the brand fill is a pastel-green gradient with dark text. */
+:root {
+  --background: 140 33% 96%;
+  --foreground: 150 30% 10%;
+  --card: 0 0% 100%;
+  --muted: 140 24% 92%;
+  --muted-foreground: 150 10% 33%;
+  --border: 140 18% 83%;
+  --primary: 146 55% 28%;
+  --accent: 356 74% 50%;
+  --on-brand: 150 55% 10%;
+  --good: 147 62% 25%;
+  --warn: 28 88% 36%;
+  --bad: 356 72% 44%;
+  --edge: 150 25% 70%;
+  color-scheme: light;
+}
+
+.dark {
+  --background: 152 34% 5%;
+  --foreground: 140 35% 95%;
+  --card: 152 28% 10%;
+  --muted: 152 22% 15%;
+  --muted-foreground: 145 14% 70%;
+  --border: 150 20% 22%;
+  --primary: 142 62% 70%;
+  --accent: 356 84% 66%;
+  --on-brand: 152 55% 9%;
+  --good: 142 60% 62%;
+  --warn: 38 92% 58%;
+  --bad: 356 84% 68%;
+  --edge: 150 40% 4%;
+  color-scheme: dark;
+}
+
+@layer base {
+  * { @apply border-border; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background-image:
+      radial-gradient(900px 520px at 8% -8%, hsl(142 60% 55% / 0.22), transparent 62%),
+      radial-gradient(700px 420px at 98% 0%, hsl(var(--accent) / 0.10), transparent 55%),
+      linear-gradient(hsl(var(--foreground) / 0.035) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--foreground) / 0.035) 1px, transparent 1px);
+    background-size: auto, auto, 36px 36px, 36px 36px;
+    background-attachment: fixed;
+  }
+  :focus-visible { @apply outline-none ring-2 ring-primary ring-offset-2 ring-offset-background; }
+}
+
+@layer components {
+  /* 3D slab: a lit top edge, a darker thick bottom edge, and layered soft shadows that lift it off the page. */
+  .glass {
+    @apply min-w-0 rounded-2xl border bg-card/85 backdrop-blur-xl;
+    border-bottom: 3px solid hsl(var(--edge));
+    box-shadow:
+      0 1px 0 hsl(0 0% 100% / 0.55) inset,
+      0 2px 3px hsl(150 30% 20% / 0.10),
+      0 14px 24px -12px hsl(150 30% 20% / 0.35),
+      0 34px 44px -28px hsl(150 30% 20% / 0.30);
+    transition: transform .25s ease, box-shadow .25s ease;
+  }
+  .dark .glass {
+    box-shadow:
+      0 1px 0 hsl(var(--foreground) / 0.10) inset,
+      0 2px 3px hsl(0 0% 0% / 0.35),
+      0 16px 26px -12px hsl(0 0% 0% / 0.65),
+      0 36px 48px -26px hsl(142 60% 30% / 0.25);
+  }
+  /* lift on hover, but never for fixed overlays (dialogs position themselves with a transform) */
+  .glass:not(.fixed):not(.absolute):hover { transform: translateY(-2px); }
+
+  /* perspective container for the mouse-tilt cards */
+  .tilt-3d { transform-style: preserve-3d; transform: perspective(900px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) translateZ(0); }
+  .tilt-3d:hover { transform: perspective(900px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) translateY(-3px); }
+
+  .text-gradient {
+    background-image: linear-gradient(90deg, hsl(var(--primary)), hsl(147 50% 46%));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  /* pastel green key-cap: bright top, a solid darker "side" underneath that compresses when pressed */
+  .bg-brand {
+    background-image: linear-gradient(180deg, hsl(143 65% 78%), hsl(144 55% 60%));
+    color: hsl(var(--on-brand));
+    box-shadow: 0 1px 0 hsl(0 0% 100% / 0.55) inset, 0 3px 0 hsl(146 50% 32%), 0 10px 18px -8px hsl(146 60% 20% / 0.6);
+  }
+  button.bg-brand:active { transform: translateY(2px); box-shadow: 0 1px 0 hsl(0 0% 100% / 0.4) inset, 0 1px 0 hsl(146 50% 32%); }
+  .tabular { font-variant-numeric: tabular-nums; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  .glass:not(.fixed):not(.absolute):hover, .tilt-3d:hover { transform: none; }
+}
