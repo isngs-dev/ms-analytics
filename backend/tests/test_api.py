@@ -111,7 +111,7 @@ def test_overview_is_event_based(api):
     m = api.get("/api/analytics/overview", params=JAN).json()["metrics"]
     assert m["received"] == 6  # f1 f2 f3 f5 f6 f7
     assert m["edited"] == 3  # f1 f2 f7 (f5 was edited in Feb, f4 is finalised not edited)
-    assert m["finalised"] == 1  # f4, by its own edit date
+    assert m["finalised"] == m["processed"] == 5  # every handled form, whatever its status (f4 included)
     assert m["processed"] == 5
     assert m["qc_completed"] == 1  # f1; f5's QC happened in Feb
     assert m["pending_editing"] == 2  # as of Jan 31: f3 and f5 (edited only on Feb 2)
@@ -264,6 +264,11 @@ def test_client_feedback_quality_of_edited_reports(api):
     assert o["quality_pct"] == 80.0 and o["escalation_free_pct"] == 80.0 and "rework" not in o and "rework_free_pct" not in o
     ov = api.get("/api/analytics/overview", params=JAN).json()["metrics"]
     assert o["edited"] == ov["processed"] and o["marked_edited"] == ov["edited"]
+    # quality check coverage: bounded, adds up, and every row follows the same rule as the total
+    assert o["qc_done"] + o["qc_pending"] == o["qc_scope"] <= o["edited"]
+    assert o["qc_checked_pct"] is None or 0 <= o["qc_checked_pct"] <= 100
+    rows_c = api.get("/api/analytics/quality", params=JAN).json()["rows"]
+    assert sum(r["qc_scope"] for r in rows_c) == o["qc_scope"] and sum(r["qc_done"] for r in rows_c) == o["qc_done"]
     assert q["rows"][0]["name"] == "ACME" and q["rows"][0]["edited"] == 5
     by_p = {r["name"]: r for r in api.get("/api/analytics/quality", params={**JAN, "by": "project"}).json()["rows"]}
     assert by_p["P1"]["quality_pct"] == 75.0 and by_p["P2"]["quality_pct"] == 100.0

@@ -19,4 +19,4 @@ export function fmtBucket(iso: string, g: string) {
 }
 
 export const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-export const label = (s: string) => s.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
+export const label = (s: string) => s === "units" ? "Forms (images)" : s.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());

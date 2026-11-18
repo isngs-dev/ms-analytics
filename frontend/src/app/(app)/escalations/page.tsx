@@ -41,7 +41,7 @@ export default function EscalationsPage() {
 
   return (
     <>
-      <PageHeader title="Escalations" subtitle="Client escalations, root causes and corrective / preventive action tracking">
+      <PageHeader title="Escalations" subtitle={s ? `${fmtDate(s.period.from)} – ${fmtDate(s.period.to)} · follows the filters above · root causes and corrective / preventive actions` : "Client escalations, root causes and corrective / preventive action tracking"}>
         <Breadcrumbs />
       </PageHeader>
       {sum.isError && <QueryError error={sum.error} />}

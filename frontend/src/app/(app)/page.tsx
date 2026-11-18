@@ -27,7 +27,7 @@ const KPIS: { key: MetricKey; label: string; tone: "brand" | "good" | "warn" | "
   { key: "pending_editing", label: "Pending editing", tone: "warn", hint: "As of period end", color: "#c2410c" },
   { key: "qc_completed", label: "QC completed", tone: "good", hint: "QC Date in period", color: "#15665a" },
   { key: "qc_pending", label: "QC pending", tone: "bad", hint: "As of period end", color: "#b91c1c" },
-  { key: "finalised", label: "Finalised", tone: "good", hint: "Finalized in period", color: "#166534" },
+  { key: "finalised", label: "Finalised", tone: "good", hint: "Handled (Transaction Date) in period", color: "#166534" },
 ];
 
 export default function OverallPage() {

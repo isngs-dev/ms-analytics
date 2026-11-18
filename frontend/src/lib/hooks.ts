@@ -42,6 +42,7 @@ export const useFormsCompare = (vs: "previous" | "yoy", enabled = true) =>
 export const useMonthDrivers = (metric: string) => useFiltered<T.MonthDriversResp>("month-drivers", "/analytics/month-drivers", { metric });
 export const useFormsMonths = (metric: string, enabled = true) =>
   useFiltered<T.FormsMonthsResp>("forms-months", "/analytics/forms-months", { metric }, enabled);
+export const useWeekGrid = (metric: string) => useFiltered<T.WeekGridResp>("week-grid", "/analytics/week-grid", { metric });
 export interface DriverQuery { metric: string; cur: [string, string]; prev: [string, string]; projectId?: number }
 export const useChangeDrivers = (q: DriverQuery, enabled: boolean) =>
   useFiltered<T.ChangeDriversResp>("change-drivers", "/analytics/change-drivers", {

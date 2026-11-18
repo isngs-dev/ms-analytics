@@ -101,6 +101,16 @@ def forms_months(metric: str = Query("received", description=" | ".join(trends.D
     return {"filters": scope.dims(), **trends.forms_by_month(db, scope, metric)}
 
 
+@router.get("/analytics/week-grid")
+def week_grid(metric: str = Query("received", description=" | ".join(trends.WEEK_METRICS)),
+              scope: Scope = Depends(scope_params), db: Session = Depends(get_db)):
+    """Monday-Sunday weeks of every month in the period, a cell per day, each week against the previous week and
+    against the same week of the month before."""
+    if metric not in trends.WEEK_METRICS:
+        raise HTTPException(422, f"metric must be one of {trends.WEEK_METRICS}")
+    return {"filters": scope.dims(), **trends.week_grid(db, scope, metric)}
+
+
 @router.get("/analytics/month-drivers")
 def month_drivers(metric: str = Query("received", description=" | ".join(trends.DROP_METRICS)),
                   scope: Scope = Depends(scope_params), db: Session = Depends(get_db)):

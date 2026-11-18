@@ -33,22 +33,22 @@ export function BarCity() {
   const patch = useFilterStore((s) => s.patch);
   const { data: meta } = useMeta();
 
-  // everything except the drill-down dimensions, so the city does not collapse as you drill
-  const { client_id, project_id, editor_id, ...base } = f as Record<string, string | number>;
+  // every filter applies: period, client, project, editor, statuses. Pick a client and only its projects remain.
+  const { client_id, project_id, editor_id } = f as Record<string, string | number>;
   const proj = useQuery({
-    queryKey: ["city", base],
-    queryFn: () => api<BreakdownResp>("/analytics/breakdown", { ...base, by: "project" }),
+    queryKey: ["city", f],
+    queryFn: () => api<BreakdownResp>("/analytics/breakdown", { ...f, by: "project" }),
     placeholderData: keepPreviousData,
   });
   const eds = useQuery({
-    queryKey: ["city-editors", base, project_id],
-    queryFn: () => api<BreakdownResp>("/analytics/breakdown", { ...base, by: "editor", project_id }),
+    queryKey: ["city-editors", f],
+    queryFn: () => api<BreakdownResp>("/analytics/breakdown", { ...f, by: "editor" }),
     enabled: project_id != null,
     placeholderData: keepPreviousData,
   });
 
   const rows = useMemo<CityRow[]>(() => (proj.data?.rows ?? []).filter((r) => r.id != null && r.received > 0).map((r) => ({
-    id: r.id as number, name: r.name, client: r.parent ?? "?", received: r.received, edited: r.edited, pending: r.pending_editing,
+    id: r.id as number, name: r.name, client: r.parent ?? "?", received: r.received, edited: r.edited, handled: r.received_handled, pending: r.received_pending,
   })), [proj.data]);
   const editors = useMemo<CityEditor[]>(() => project_id == null ? [] : (eds.data?.rows ?? []).filter((r) => r.id != null && r.processed > 0)
     .slice(0, 10).map((r) => ({ id: r.id as number, name: r.name, value: r.processed })), [eds.data, project_id]);
@@ -70,15 +70,15 @@ export function BarCity() {
   const show3D = use3D && view === "city";
   const flat = (
     <RankBars
-      rows={rows.map((r) => ({ id: r.id, name: `${r.client} · ${r.name}`, values: { received: r.received, pending_editing: r.pending } }))}
-      keys={["received", "pending_editing"]} limit={15} onClick={(b) => { const r = rows.find((x) => x.id === b.id); if (r) pickProject(r); }}
+      rows={rows.map((r) => ({ id: r.id, name: `${r.client} · ${r.name}`, values: { received_handled: r.handled, received_pending: r.pending } }))}
+      keys={["received_handled", "received_pending"]} stacked limit={15} onClick={(b) => { const r = rows.find((x) => x.id === b.id); if (r) pickProject(r); }}
     />
   );
 
   return (
     <ChartCard
       title="Volume by client and project"
-      subtitle={show3D ? "Bar height = forms received. Drag to orbit, click a bar to drill in, use the breadcrumb to go back" : "Forms received and pending editing. Click a bar to drill in"}
+      subtitle={show3D ? "Bar height = forms received in the period, the orange part is still pending. Follows the filters above. Drag to orbit, click a bar to drill in" : "Forms received in the period: green = already handled, orange = still pending, so the whole bar is the forms received. Follows the filters above"}
       action={
         <Tabs label="Chart style" value={view} onChange={setView}
           items={[{ value: "city", label: "3D city" }, { value: "bars", label: "2D bars" }]} />
@@ -98,10 +98,10 @@ export function BarCity() {
         <summary className="cursor-pointer text-muted-foreground">View as table</summary>
         <table className="mt-2 w-full text-left">
           <caption className="sr-only">Forms received by client and project</caption>
-          <thead><tr className="text-xs text-muted-foreground"><th scope="col" className="py-1 font-medium">Client / project</th><th scope="col" className="py-1 text-right font-medium">Received</th><th scope="col" className="py-1 text-right font-medium">Pending</th></tr></thead>
+          <thead><tr className="text-xs text-muted-foreground"><th scope="col" className="py-1 font-medium">Client / project</th><th scope="col" className="py-1 text-right font-medium">Received</th><th scope="col" className="py-1 text-right font-medium">Handled</th><th scope="col" className="py-1 text-right font-medium">Pending</th><th scope="col" className="py-1 text-right font-medium">% handled</th></tr></thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r.id} className="border-t"><th scope="row" className="py-1 font-normal">{r.client} · {r.name}</th><td className="py-1 text-right tabular-nums">{fmtInt(r.received)}</td><td className="py-1 text-right tabular-nums">{fmtInt(r.pending)}</td></tr>
+              <tr key={r.id} className="border-t"><th scope="row" className="py-1 font-normal">{r.client} · {r.name}</th><td className="py-1 text-right tabular-nums">{fmtInt(r.received)}</td><td className="py-1 text-right tabular-nums">{fmtInt(r.handled)}</td><td className="py-1 text-right tabular-nums">{fmtInt(r.pending)}</td><td className="py-1 text-right tabular-nums">{r.received ? `${(100 * r.handled / r.received).toFixed(1)}%` : "–"}</td></tr>
             ))}
           </tbody>
         </table>

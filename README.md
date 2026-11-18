@@ -149,7 +149,8 @@ Counts are event-based: each uses its own date, never the form's current status.
 `/api/analytics/overview`.
 
 - **Received**: Input Date in period. **Edited**: Transaction Date in period and Ops Status counts as edited
-  (default: only *Edited & Saved*, changeable in Admin > Status map). **Finalised**: Finalized / Client Finalized.
+  (default: only *Edited & Saved*, changeable in Admin > Status map). **Finalised**: every form handled in the period (Transaction Date in period, any status), so it lines up with Received.
+  **Global Data counts images, not rows**: each row of the Global Data sheet is one shop with N photos, and the `#images` cell is its form count, so every volume (received, edited, finalised, QC, pending) is the sum of `#images` (`forms.units`). Other projects are 1 per row. Override the list with AppSetting `image_count_projects` = `{"projects": ["Global Data", ...]}`; a blank `#images` cell counts as 1.
 - **QC completed**: QC Date in period. **Pending editing / QC pending**: evaluated *as of the period end*, so history
   shows what was pending then. QC only applies to projects that have QC data (Admin can override per project).
 - **Escalations**: the `Escalation` tab, with action status / owner tracked in the app. **Rework is deliberately left

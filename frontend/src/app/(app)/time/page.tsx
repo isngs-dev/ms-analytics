@@ -7,6 +7,7 @@ import { Breadcrumbs } from "@/components/breadcrumbs";
 import { ChartCard, ChartSkeleton, DeltaBadge, PageHeader, QueryError } from "@/components/widgets";
 import { TrendChart } from "@/components/charts";
 import { DriverTip } from "@/components/driver-tip";
+import { WeekGridCard } from "@/components/week-grid-card";
 import { useCompare, useOverview, useTimeseries } from "@/lib/hooks";
 import { useFilterStore } from "@/lib/store";
 import { fmtDate, fmtInt } from "@/lib/format";
@@ -27,11 +28,15 @@ const COMPARE_WITH = [
   { value: "yoy", label: "Same period last year" },
   { value: "week_vs_prev_month_week", label: "Same week last month (week filter only)" },
 ];
-type CmpGran = "week" | "month" | "quarter" | "year";
+type CmpGran = "day" | "week" | "month" | "quarter" | "year";
 const CMP_GRANS: { value: CmpGran; label: string }[] = [
-  { value: "week", label: "Weekly" }, { value: "month", label: "Monthly" },
+  { value: "day", label: "Daily" }, { value: "week", label: "Weekly" }, { value: "month", label: "Monthly" },
   { value: "quarter", label: "Quarterly" }, { value: "year", label: "Yearly" },
 ];
+const COL_HEAD: Record<CmpGran, string> = { day: "Day", week: "Week (Mon–Sun)", month: "Month", quarter: "Quarter", year: "Year" };
+/** a day is set against the same weekday a week earlier; every other bucket against the one before it */
+const BACK: Record<CmpGran, number> = { day: 7, week: 1, month: 1, quarter: 1, year: 1 };
+const WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const utc = (iso: string) => { const [y, m, d] = iso.split("-").map(Number); return new Date(Date.UTC(y, m - 1, d)); };
 const iso = (d: Date) => d.toISOString().slice(0, 10);
@@ -40,6 +45,7 @@ const addDays = (d: Date, n: number) => new Date(d.getTime() + n * 86_400_000);
 /** First/last day and a readable label of a calendar bucket. */
 function bucketInfo(start: string, g: CmpGran): { label: string; sub?: string; end: string } {
   const s = utc(start), y = s.getUTCFullYear(), m = s.getUTCMonth();
+  if (g === "day") return { label: `${s.getUTCDate()} ${MON[m]} ${y}`, sub: WD[s.getUTCDay()], end: start };
   if (g === "year") return { label: String(y), end: `${y}-12-31` };
   if (g === "quarter") return { label: `Q${Math.floor(m / 3) + 1} ${y}`, sub: `${MON[m]} – ${MON[m + 2]}`, end: iso(new Date(Date.UTC(y, m + 3, 0))) };
   if (g === "month") return { label: `${MON[m]} ${y}`, end: iso(new Date(Date.UTC(y, m + 1, 0))) };
@@ -78,22 +84,25 @@ function PeriodByPeriod({ period }: { period?: { from: string; to: string } }) {
   const g: CmpGran = pick ?? (auto === "day" ? "week" : auto);
   const ts = useTimeseries(g);
   const pts = ts.data?.points ?? [];
+  const back = BACK[g];
   const rows = pts.map((p, i) => {
     const info = bucketInfo(p.bucket, g);
     const partial = !!period && (p.bucket < period.from || info.end > period.to);
-    return { p, info, partial, prev: i > 0 ? pts[i - 1] : null };
+    return { p, info, partial, prev: i >= back ? pts[i - back] : null };
   });
   const total = (k: (typeof STEP_COLS)[number]["key"]) => pts.reduce((a, p) => a + p[k], 0);
   return (
     <ChartCard className="mt-4" title="Period-by-period comparison"
-      subtitle={`Each ${g} in the selected range against the ${g} before it`}
+      subtitle={g === "day" ? "Each day in the selected range against the same weekday a week earlier (empty days count as 0)"
+        : g === "week" ? "Each Monday–Sunday week in the selected range against the week before it (empty days count as 0)"
+        : `Each ${g} in the selected range against the ${g} before it`}
       action={<Tabs label="Comparison basis" value={g} onChange={setPick} items={CMP_GRANS} />}>
       {ts.isError ? <QueryError error={ts.error} /> : ts.isLoading ? <ChartSkeleton h={200} /> : (
         <div className="max-h-[32rem] overflow-auto rounded-xl border">
           <table className="w-full min-w-[46rem] text-left text-sm">
-            <caption className="sr-only">Comparison of each {g} with the previous {g}</caption>
+            <caption className="sr-only">{g === "day" ? "Comparison of each day with the same weekday a week earlier" : `Comparison of each ${g} with the previous ${g}`}</caption>
             <thead className="sticky top-0 z-10 bg-muted/90 backdrop-blur"><tr>
-              <th scope="col" className="px-3 py-2 font-medium">{CMP_GRANS.find((x) => x.value === g)!.label.replace("ly", "")}</th>
+              <th scope="col" className="px-3 py-2 font-medium">{COL_HEAD[g]}</th>
               {STEP_COLS.map((c) => <th key={c.key} scope="col" className="px-3 py-2 font-medium">{c.label}</th>)}
             </tr></thead>
             <tbody>
@@ -107,7 +116,7 @@ function PeriodByPeriod({ period }: { period?: { from: string; to: string } }) {
                     <td key={c.key} className="px-3 py-2">
                       <span className="tabular">{fmtInt(p[c.key])}</span>{" "}
                       {prev ? <WhyBadge change={stepChange(p[c.key], prev[c.key])} less={c.less} metric={c.key}
-                        cur={clip(p.bucket, info.end, period)} prev={clip(prev.bucket, bucketInfo(prev.bucket, g).end, period)} />
+                        cur={clip(p.bucket, info.end, period)} prev={g === "day" ? [prev.bucket, prev.bucket] : clip(prev.bucket, bucketInfo(prev.bucket, g).end, period)} />
                         : <span className="text-xs text-muted-foreground">–</span>}
                     </td>
                   ))}
@@ -162,6 +171,8 @@ export default function TimePage() {
           <TrendChart points={ts.data!.points} granularity={g} keys={["received", "edited", "finalised", "qc_completed"]} height={340} />
         )}
       </ChartCard>
+
+      <WeekGridCard />
 
       <PeriodByPeriod period={ov.data?.period} />
 

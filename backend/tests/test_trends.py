@@ -5,6 +5,7 @@ import pytest
 
 from app.models import DimClient, DimProject, Form
 from app.services import trends
+from app.services.metrics import overview as metrics_overview
 from app.services.scope import Scope
 
 D = date
@@ -143,6 +144,59 @@ def test_change_drivers_add_up_to_the_change(session, world):
     assert drop["delta"] == -4 and drop["decliners"][0]["form"] == "Alpha" and drop["gainers"] == []
 
 
+def test_month_weeks_are_whole_monday_sunday_weeks_owned_by_their_thursday():
+    jan = trends.month_weeks(D(2026, 1, 1))
+    assert jan == [D(2025, 12, 29), D(2026, 1, 5), D(2026, 1, 12), D(2026, 1, 19), D(2026, 1, 26)]
+    assert all(m.weekday() == 0 for m in jan)
+    assert trends.month_weeks(D(2026, 10, 1))[0] == D(2026, 9, 28)  # Thursday 1 Oct
+    assert D(2026, 9, 28) not in trends.month_weeks(D(2026, 9, 1))  # never in two months
+
+
+def test_week_grid_counts_every_day_including_an_empty_sunday(session, world):
+    out = trends.week_grid(session, scope(), "received", today=TODAY)
+    jan = out["months"][0]
+    assert [w["no"] for w in jan["weeks"]] == [1, 2, 3, 4, 5]
+    w2 = jan["weeks"][1]
+    assert (w2["from"], w2["to"], w2["total"]) == ("2026-01-05", "2026-01-11", 10)
+    assert [d["weekday"] for d in w2["days"]] == list(trends.WEEKDAYS)
+    assert [d["n"] for d in w2["days"]] == [4, 0, 0, 0, 0, 6, 0]  # Mon Beta 4, Sat Alpha 6, Sunday 0 still a day
+    assert w2["days_counted"] == 7 and w2["avg_per_day"] == round(10 / 7, 1)
+    assert out["total"] == 24 and sum(m["total"] for m in out["months"]) == 24
+
+
+def test_week_grid_compares_with_the_same_week_of_the_month_before(session, world):
+    out = trends.week_grid(session, scope(), "received", today=TODAY)
+    feb = out["months"][1]
+    assert [w["no"] for w in feb["weeks"]] == [1, 2, 3, 4]
+    w1, w2 = feb["weeks"][0], feb["weeks"][1]
+    assert w1["total"] == 6 and w2["total"] == 0
+    same = w2["vs_same_week_last_month"]  # Feb 9-15 against Jan 5-11
+    assert (same["prev"], same["cur"]) == (["2026-01-05", "2026-01-11"], ["2026-02-09", "2026-02-15"])
+    assert (same["current"], same["previous"], same["delta"], same["direction"]) == (0, 10, -10, "down")
+    prev_wk = w1["vs_previous_week"]
+    assert prev_wk["prev"] == ["2026-01-26", "2026-02-01"] and prev_wk["current"] == 6
+    jan5 = out["months"][0]["weeks"][4]
+    assert jan5["vs_same_week_last_month"] is None and jan5["same_week_last_month_missing"] is True
+    assert feb["vs_previous_month"]["previous"] == 10 + 0 and feb["vs_previous_month"]["current"] == 6
+
+
+def test_week_grid_follows_filters_and_the_running_week_is_like_for_like(session, world):
+    only_b = trends.week_grid(session, scope(project_ids=(world["b"].id,)), "received", today=TODAY)
+    assert only_b["months"][0]["weeks"][1]["total"] == 4
+    s = session
+    c = s.query(DimClient).one()
+    add(s, c, world["a"], "Alpha", 6, 15, 2)   # Monday 15 June = today
+    add(s, c, world["a"], "Alpha", 6, 8, 5)    # Monday 8 June
+    add(s, c, world["a"], "Alpha", 6, 12, 9)   # Friday 12 June: after day one of the week, must not count
+    s.commit()
+    out = trends.week_grid(session, Scope(D(2026, 6, 1), D(2026, 6, 30)), "received", today=TODAY)
+    wk = [w for w in out["months"][0]["weeks"] if w["from"] == "2026-06-15"][0]
+    assert wk["running"] is True and wk["total"] == 2 and wk["days_counted"] == 1
+    assert [d["future"] for d in wk["days"]] == [False] + [True] * 6 and wk["days"][1]["n"] is None
+    assert wk["vs_previous_week"]["prev"] == ["2026-06-08", "2026-06-08"]
+    assert (wk["vs_previous_week"]["current"], wk["vs_previous_week"]["previous"]) == (2, 5)
+
+
 def test_change_drivers_respect_filters_and_limit(session, world):
     only_a = trends.change_drivers(session, scope(project_ids=(world["a"].id,)), "received",
                                    (D(2026, 2, 1), D(2026, 2, 28)), (D(2026, 1, 1), D(2026, 1, 31)))
@@ -150,3 +204,39 @@ def test_change_drivers_respect_filters_and_limit(session, world):
     one = trends.change_drivers(session, scope(), "received", (D(2026, 3, 1), D(2026, 3, 31)),
                                 (D(2026, 1, 1), D(2026, 1, 31)), limit=1)
     assert len(one["decliners"]) == 1 and one["decliner_count"] == 2  # A/Alpha and B/Beta both fell vs January
+
+
+def test_image_counted_project_adds_its_images_not_its_rows(session):
+    from app.etl.loader import image_units
+    from app.services import metrics
+    assert image_units({"#images": "14.0"}) == 14 and image_units({"#Images": "0"}) == 0
+    assert image_units({}) == 1 and image_units({"#images": "n/a"}) == 1  # unreadable: the row still counts
+    s = session
+    c = DimClient(name="IS")
+    s.add(c)
+    s.flush()
+    p = DimProject(client_id=c.id, name="Global Data")
+    s.add(p)
+    s.flush()
+    for i, n in enumerate((14, 23, 0)):
+        s.add(Form(client_id=c.id, project_id=p.id, job_id=f"G{i}", received_date=D(2026, 3, 4), form_name="Photos",
+                   edit_date=D(2026, 3, 5), edit_status="Finalized", units=n, row_hash=f"g{i}"))
+    s.commit()
+    sc = Scope(D(2026, 3, 1), D(2026, 3, 31))
+    m = metrics.overview(s, sc)
+    assert (m["received"], m["finalised"], m["processed"]) == (37, 37, 37)  # 3 rows, 37 images
+    assert (m["received_handled"], m["received_pending"]) == (37, 0)
+    pts = {r["bucket"]: r for r in metrics.timeseries(s, sc, "day")}
+    assert pts["2026-03-04"]["received"] == 37 and pts["2026-03-05"]["finalised"] == 37
+    out = trends.week_grid(s, sc, "received", today=TODAY)
+    assert out["total"] == 37
+    assert trends.change_drivers(s, sc, "received", (D(2026, 3, 1), D(2026, 3, 31)),
+                                 (D(2026, 2, 1), D(2026, 2, 28)))["gainers"][0]["delta"] == 37
+
+
+def test_received_splits_into_handled_and_still_pending(session, world):
+    m = metrics_overview(session, Scope(D(2026, 3, 1), D(2026, 3, 31)))
+    assert m["received"] == 8 and m["received_handled"] == 5 and m["received_pending"] == 3  # Gamma's 5 are edited
+    assert m["received_handled"] + m["received_pending"] == m["received"]
+    jan = metrics_overview(session, Scope(D(2026, 1, 1), D(2026, 1, 31)))
+    assert (jan["received"], jan["received_handled"], jan["received_pending"]) == (10, 0, 10)

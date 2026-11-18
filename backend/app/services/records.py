@@ -35,7 +35,7 @@ FORM_COLUMNS = {
     "qc_status": Form.qc_status, "hold_category": Form.hold_category,
     "incomplete_status": Form.incomplete_status, "client_escalation": Form.client_escalation,
     "error_category_raw": Form.error_category_raw, "comments_to_shopper": Form.comments_to_shopper,
-    "qc_feedback": Form.qc_feedback, "dup_count": Form.dup_count,
+    "qc_feedback": Form.qc_feedback, "dup_count": Form.dup_count, "units": Form.units,
     # traceability: every record points back to the Drive document, tab and row it came from
     "source_file": SrcFile.name, "source_tab": SrcSheet.tab_name, "source_row": Form.source_row_no,
     "source_file_id": SrcFile.id, "stage": STAGE,
@@ -47,7 +47,7 @@ DEFAULT_FORM_COLUMNS = ["client", "project", "form_name", "job_id", "location", 
 # What is worth showing depends on what is being counted: a form that is pending editing has, by definition,
 # no edit date / edit status / QC data yet, so those columns would be empty. Each metric lists the fields that
 # are actually filled for its rows (the user can still pick any columns).
-_ID = ["client", "project", "form_name", "job_id", "location"]
+_ID = ["client", "project", "form_name", "job_id", "location", "units"]
 _SRC = ["source_file", "source_tab", "source_row"]  # row number = the row to look at in the Google Sheet
 METRIC_COLUMNS = {
     "received": [*_ID, "shop_date", "received_date", "input_status", "stage", "editor", "editor_type", *_SRC],
@@ -113,12 +113,12 @@ def form_records(db: Session, scope: Scope, metric: str | None, search: str | No
                  order: str, page: int, page_size: int, columns: list[str] | None) -> dict:
     cols = _pick_columns(columns, metric)
     where = _form_filters(db, scope, metric, search)
-    total = db.scalar(_forms_base([func.count()]).where(*where)) or 0
+    total, units = db.execute(_forms_base([func.count(), func.coalesce(func.sum(Form.units), 0)]).where(*where)).one()
     q = (_forms_base([FORM_COLUMNS[c].label(c) for c in cols]).where(*where)
          .order_by(*_order(sort, order)).limit(page_size).offset((page - 1) * page_size))
     rows = [{k: (v.isoformat() if hasattr(v, "isoformat") else v) for k, v in r.items()}
             for r in db.execute(q).mappings()]
-    return {"total": int(total), "page": page, "page_size": page_size, "columns": cols, "rows": rows,
+    return {"total": int(total or 0), "total_units": int(units or 0), "page": page, "page_size": page_size, "columns": cols, "rows": rows,
             "period": {"from": scope.date_from.isoformat(), "to": scope.date_to.isoformat()}}
 
 

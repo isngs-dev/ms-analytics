@@ -1,6 +1,8 @@
 export interface Metrics {
   received: number; edited: number; finalised: number; processed: number; qc_completed: number;
   pending_editing: number; qc_pending: number;
+  /** received in the period: already handled at the period end / still waiting (the two add up to `received`) */
+  received_handled: number; received_pending: number;
   editing_pct: number | null; qc_pct: number | null; completion_pct: number | null; edited_rate_pct: number | null;
 }
 export type MetricKey = "received" | "edited" | "finalised" | "processed" | "qc_completed" | "pending_editing" | "qc_pending";
@@ -17,6 +19,8 @@ export interface TimeseriesResp { period: Period; granularity: string; points: S
 export interface QualityRow {
   edited: number; marked_edited: number; escalated: number; came_back: number; clean: number;
   quality_pct: number | null; escalation_free_pct: number | null;
+  /** reports edited in QC-applicable projects, how many of them are quality-checked by the period end, the rest, and the share */
+  qc_scope: number; qc_done: number; qc_pending: number; qc_checked_pct: number | null;
 }
 export interface QualityResp {
   period: Period; definition: string; by: string; overall: QualityRow;
@@ -50,7 +54,7 @@ export interface MetaResp {
 export interface Me { id: number; email: string; name: string; role: "viewer" | "manager" | "admin" }
 
 export interface RecordsResp {
-  total: number; page: number; page_size: number; columns: string[]; rows: Record<string, string | number | null>[];
+  total: number; total_units?: number; page: number; page_size: number; columns: string[]; rows: Record<string, string | number | null>[];
   period: Period;
 }
 
@@ -65,6 +69,7 @@ export interface QcResp {
 }
 export interface Group { id: number | null; name: string; count: number }
 export interface EscSummary {
+  period: Period;
   total: number; closed: number; open: number;
   by_client: Group[]; by_project: Group[]; by_editor: Group[]; by_root_cause: Group[];
   by_error_category: Group[]; by_action_status: Group[]; by_month: Group[];
@@ -153,6 +158,17 @@ export interface FormsMonthsResp {
 }
 
 export interface DriverRow { project_id: number; project: string; client?: string; form: string; current: number; previous: number; delta: number }
+export interface WeekCmp extends Change { cur: [string, string]; prev: [string, string] }
+export interface WeekDay { date: string; weekday: string; future: boolean; n: number | null; previous: number }
+export interface WeekRow {
+  no: number; from: string; to: string; running: boolean; days_counted: number; days: WeekDay[]; total: number; avg_per_day: number;
+  vs_previous_week: WeekCmp | null; vs_same_week_last_month: WeekCmp | null; same_week_last_month_missing: boolean;
+}
+export interface WeekMonth {
+  month: string; from: string; to: string; week_count: number; running: boolean; total: number; weeks: WeekRow[]; vs_previous_month: WeekCmp | null;
+}
+export interface WeekGridResp { metric: string; definition: string; rule: string; weekdays: string[]; months: WeekMonth[]; total: number }
+
 export interface ChangeDriversResp {
   metric: string; definition: string; delta: number;
   current: { from: string; to: string; total: number }; previous: { from: string; to: string; total: number };

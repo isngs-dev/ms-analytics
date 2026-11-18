@@ -165,6 +165,9 @@ class Form(Base):
     source_row_no: Mapped[int | None]
     row_hash: Mapped[str] = mapped_column(String(64))
     dup_count: Mapped[int] = mapped_column(Integer, default=0)  # extra occurrences of same identity
+    # How many forms this row stands for. 1 for ordinary projects; for the projects counted by images (Global Data)
+    # it is the sheet's '#images' cell, so every volume figure is a sum of units, not a row count.
+    units: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     extra: Mapped[dict] = mapped_column(JSONB, default=dict)  # unmapped columns, never dropped
     first_seen_at: Mapped[datetime] = _ts()
     last_seen_at: Mapped[datetime] = _ts()

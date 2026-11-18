@@ -33,10 +33,11 @@ def is_blank(v: Any) -> bool:
     return clean_text(v) is None
 
 
-def parse_date(v: Any) -> date | None:
+def parse_date(v: Any, dash_month_first: bool = False) -> date | None:
     """US month-first dates, 2- or 4-digit years, ISO, Sheets serial numbers.
 
-    If a cell holds several dates ('4/24/2025 4/25/2025') the first one wins.
+    If a cell holds several dates ('4/24/2025 4/25/2025') the first one wins. Dates with - or . are day-first unless
+    `dash_month_first` (a sheet whose own cells prove it: '07-14-26').
     Returns None for blanks and for anything unparseable (caller decides if that is an issue).
     """
     if v is None:
@@ -58,7 +59,8 @@ def parse_date(v: Any) -> date | None:
     if d:
         try:
             y = int(d.group(3))
-            return date(y + 2000 if y < 100 else y, int(d.group(2)), int(d.group(1)))
+            a, b = int(d.group(1)), int(d.group(2))
+            return date(y + 2000 if y < 100 else y, *((a, b) if dash_month_first else (b, a)))
         except ValueError:
             return None
     m = _ISO.search(s)

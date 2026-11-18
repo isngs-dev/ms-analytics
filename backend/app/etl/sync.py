@@ -144,6 +144,7 @@ def run_sync(session: Session, source: SheetSource, trigger: str = "manual", for
     return log
 
 
+ONLY_KINDS: set[str] | None = None  # set by scripts/resync_kind.py
 SYNC_YEARS_KEY = "sync_years"
 
 
@@ -252,6 +253,8 @@ def _process_file(session, source, meta: FileMeta, sf: SrcFile, loader: Loader,
         if rule.read_cells and rule.kind in _READ_KINDS:
             planned.append((sheet, rule))
 
+    if ONLY_KINDS:  # a targeted re-read (scripts/resync_kind.py): leave every other tab alone
+        planned = [t for t in planned if t[1].kind in ONLY_KINDS]
     planned.sort(key=lambda t: _KIND_ORDER[t[0].kind])
     # one batched read for the whole workbook (Drive: a single round trip), only for tabs we want
     data = source.read_tabs(meta, [s.tab_name for s, _ in planned])

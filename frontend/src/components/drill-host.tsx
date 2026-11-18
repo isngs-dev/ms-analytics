@@ -41,7 +41,7 @@ export function DrillHost() {
 
   return (
     <Modal open={open} onOpenChange={(o) => !o && close()} title={title}
-      description={q.data ? `${q.data.total.toLocaleString("en-US")} records · ${q.data.period.from} to ${q.data.period.to}` : "Loading records…"} wide>
+      description={q.data ? `${q.data.total.toLocaleString("en-US")} records${q.data.total_units != null && q.data.total_units !== q.data.total ? ` = ${q.data.total_units.toLocaleString("en-US")} forms (Global Data counts its #images)` : ""} · ${q.data.period.from} to ${q.data.period.to}` : "Loading records…"} wide>
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <Input placeholder="Search job id, location, editor…" aria-label="Search records" className="max-w-xs"
           value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />

@@ -68,6 +68,8 @@ function Body({ data }: { data: TipData }) {
   );
 }
 
+const range = (r: { from: string; to: string }) => (r.from === r.to ? fmtDate(r.from) : `${fmtDate(r.from)} – ${fmtDate(r.to)}`);
+
 function Remote({ query }: { query: DriverQuery }) {
   const q = useChangeDrivers(query, true);
   if (q.isError) return <p className="text-xs text-bad">Could not load the forms behind this change.</p>;
@@ -75,7 +77,7 @@ function Remote({ query }: { query: DriverQuery }) {
   const d = q.data;
   return <Body data={{
     delta: d.delta, previousTotal: d.previous.total, currentTotal: d.current.total,
-    periods: `${fmtDate(d.previous.from)} – ${fmtDate(d.previous.to)}  →  ${fmtDate(d.current.from)} – ${fmtDate(d.current.to)}`,
+    periods: `${range(d.previous)}  →  ${range(d.current)}`,
     decliners: d.decliners, decliner_count: d.decliner_count, decline_total: d.decline_total,
     gainers: d.gainers, gainer_count: d.gainer_count, gain_total: d.gain_total,
   }} />;

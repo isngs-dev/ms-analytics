@@ -166,6 +166,111 @@ def forms_by_month(db: Session, scope: Scope, metric: str = "received", today: d
     return out
 
 
+# ------------------------------------------------------------------------------ Monday-Sunday weeks, week n of every month
+WEEK_METRICS = ("received", "edited", "finalised", "qc_completed")
+WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+
+
+def month_weeks(month: date) -> list[date]:
+    """Mondays of the whole Monday-Sunday weeks that belong to a month. A week belongs to the month that holds its
+    Thursday (the ISO rule), so every week is complete, no day is counted twice and each week sits in one month."""
+    first = month.replace(day=1)
+    last = _month_end(first)
+    thu = first + timedelta(days=(3 - first.weekday()) % 7)
+    out = []
+    while thu <= last:
+        out.append(thu - timedelta(days=3))
+        thu += timedelta(days=7)
+    return out
+
+
+def _day_counts(db: Session, scope: Scope, metric: str) -> dict[date, int]:
+    sets = metrics.status_sets(db)
+    pred = metrics.predicates(scope, sets)[metric]
+    col = METRIC_DATE[metric]
+    q = (metrics._form_from().add_columns(col.label("d"), metrics.tally().label("n"))
+         .where(*metrics.dim_conditions(scope), pred).group_by(col))
+    return {r["d"]: int(r["n"]) for r in db.execute(q).mappings() if r["d"] is not None}
+
+
+def _span(daily: dict[date, int], a: date, b: date) -> int:
+    return sum(daily.get(a + timedelta(days=i), 0) for i in range((b - a).days + 1))
+
+
+def week_grid(db: Session, scope: Scope, metric: str = "received", today: date | None = None) -> dict:
+    """Monday-Sunday weeks of every month in the selected period, one cell per day (a Sunday with no work is a 0,
+    not a gap), each week against the previous week and against the same week number of the month before.
+    The week still running is compared with the same number of days of the other week. Ranges of every comparison
+    are returned, so a hover can ask `change_drivers` which forms moved the number."""
+    if metric not in WEEK_METRICS:
+        raise ValueError(metric)
+    today = today or date.today()
+    months, d = [], scope.date_from.replace(day=1)
+    while d <= scope.date_to and d <= today:
+        months.append(d)
+        d += relativedelta(months=1)
+
+    layout: list[tuple[date, list[date], list[date]]] = []  # month, its shown Mondays, the month before's Mondays
+    for m in months:
+        shown = [mon for mon in month_weeks(m)
+                 if mon <= today and mon <= scope.date_to and mon + timedelta(days=6) >= scope.date_from]
+        if shown:
+            layout.append((m, shown, month_weeks(m - relativedelta(months=1))))
+    base = {"metric": metric, "definition": metrics.DEFINITIONS[metric], "weekdays": list(WEEKDAYS),
+            "rule": "Weeks run Monday to Sunday and are counted whole. A week belongs to the month that holds its "
+                    "Thursday. Days after today are left empty; every earlier day, Sunday included, counts even "
+                    "when it is 0.",
+            "months": [], "total": 0}
+    if not layout:
+        return base
+
+    starts = [mon for _, shown, prior in layout for mon in shown + prior]
+    lo = min(starts) - timedelta(days=7)
+    hi = min(max(starts) + timedelta(days=6), today)
+    daily = _day_counts(db, scope.with_range(lo, hi), metric)
+
+    def cmp(cur: tuple[date, date], prev: tuple[date, date]) -> dict | None:
+        """cur against prev; an unfinished cur is cut at today and prev at the same number of days."""
+        cf, ct = cur[0], min(cur[1], today)
+        if ct < cf:
+            return None
+        pf, pt = prev
+        pt = min(pt, pf + timedelta(days=(ct - cf).days))
+        return {"cur": [cf.isoformat(), ct.isoformat()], "prev": [pf.isoformat(), pt.isoformat()],
+                **compare.change(_span(daily, cf, ct), _span(daily, pf, pt))}
+
+    for m, shown, prior in layout:
+        weeks = []
+        for mon in shown:
+            sun = mon + timedelta(days=6)
+            no = month_weeks(m).index(mon) + 1
+            days = []
+            for i in range(7):
+                day = mon + timedelta(days=i)
+                before = day - timedelta(days=7)
+                days.append({"date": day.isoformat(), "weekday": WEEKDAYS[i], "future": day > today,
+                             "n": daily.get(day, 0) if day <= today else None,
+                             "previous": daily.get(before, 0) if before <= today else 0})
+            elapsed = min(7, (today - mon).days + 1)
+            total = _span(daily, mon, min(sun, today))
+            vs_month = cmp((mon, sun), (prior[no - 1], prior[no - 1] + timedelta(days=6))) if no <= len(prior) else None
+            weeks.append({"no": no, "from": mon.isoformat(), "to": sun.isoformat(), "running": sun > today,
+                          "days_counted": elapsed, "days": days, "total": total,
+                          "avg_per_day": round(total / elapsed, 1),
+                          "vs_previous_week": cmp((mon, sun), (mon - timedelta(days=7), mon - timedelta(days=1))),
+                          "vs_same_week_last_month": vs_month,
+                          "same_week_last_month_missing": vs_month is None and no > len(prior)})
+        first, last = shown[0], shown[-1] + timedelta(days=6)
+        p_from = prior[0] if prior else first - timedelta(days=28)
+        p_to = (prior[-1] + timedelta(days=6)) if prior else first - timedelta(days=1)
+        base["months"].append({"month": m.isoformat(), "from": first.isoformat(), "to": last.isoformat(),
+                               "week_count": len(shown), "running": last > today,
+                               "total": _span(daily, first, min(last, today)), "weeks": weeks,
+                               "vs_previous_month": cmp((first, last), (p_from, p_to)) if prior else None})
+    base["total"] = sum(mo["total"] for mo in base["months"])
+    return base
+
+
 # ------------------------------------------------------------------------------ which project / form pulled a month down
 def _month_counts(db: Session, scope: Scope, metric: str) -> dict[tuple[date, int, str], int]:
     sets = metrics.status_sets(db)
@@ -173,7 +278,7 @@ def _month_counts(db: Session, scope: Scope, metric: str) -> dict[tuple[date, in
     month = func.date_trunc("month", METRIC_DATE[metric]).cast(Date)
     label = _form_label()
     q = (metrics._form_from().add_columns(month.label("m"), Form.project_id.label("pid"), label.label("form"),
-                                          func.count().label("n"))
+                                          metrics.tally().label("n"))
          .where(*metrics.dim_conditions(scope), pred).group_by(month, Form.project_id, label))
     return {(r["m"], r["pid"], r["form"]): int(r["n"]) for r in db.execute(q).mappings()}
 

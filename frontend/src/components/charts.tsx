@@ -13,6 +13,8 @@ export const SERIES: Record<string, { label: string; color: string }> = {
   pending_editing: { label: "Pending editing", color: COLORS.pending },
   qc_pending: { label: "QC pending", color: "#8aa397" },
   processed: { label: "Processed", color: COLORS.edited },
+  received_handled: { label: "Received & handled", color: COLORS.received },
+  received_pending: { label: "Received, still pending", color: COLORS.pending },
 };
 
 export function TrendChart({

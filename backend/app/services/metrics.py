@@ -2,7 +2,7 @@
 
   received         Input Date in period
   edited           Transaction Date in period AND Ops Status counts as 'edited' (status_map)
-  finalised        Transaction Date in period AND Ops Status counts as 'finalised' (status_map)
+  finalised        every form handled: Transaction Date in period, whatever its Ops Status (same count as processed)
   processed        Transaction Date in period (any outcome, incl. hold / incomplete)
   qc_completed     QC Date in period
   pending_editing  AS OF period end: received on/before end, not processed by end
@@ -29,12 +29,14 @@ METRICS = ["received", "edited", "finalised", "processed", "qc_completed", "pend
 DEFINITIONS = {
     "received": "forms whose Input Date falls in the period",
     "edited": "forms whose Transaction Date falls in the period and whose Ops Status counts as edited",
-    "finalised": "forms whose Transaction Date falls in the period and whose Ops Status counts as finalised",
+    "finalised": "forms handled in the period: Transaction Date in the period, whatever the Ops Status (Hold, Incomplete, Accepted ... all count)",
     "processed": "forms with a Transaction Date in the period, any outcome",
     "qc_completed": "forms whose QC Date falls in the period",
     "pending_editing": "as of period end: received on or before the end and not processed by then",
     "qc_pending": "as of period end: edited, in a QC-applicable project, with no QC by then",
     # all three are bounded 0-100%, recomputed for whatever period / filters are selected
+    "received_handled": "of the forms received in the period, those already handled (Transaction Date) by the period end",
+    "received_pending": "of the forms received in the period, those still not handled at the period end (received_handled + received_pending = received)",
     "editing_pct": "editing workload cleared: processed / (processed + pending editing at period end)",
     "qc_pct": "QC workload cleared: qc_completed / (qc_completed + qc_pending at period end)",
     "completion_pct": "of forms received in the period, the share processed by period end",
@@ -79,12 +81,11 @@ def dim_conditions(scope: Scope) -> list:
 def predicates(scope: Scope, sets: StatusSets) -> dict[str, Any]:
     a, b = scope.date_from, scope.date_to
     edited_ok = Form.edit_status.in_(sets.edited) if sets.edited else literal(False)
-    final_ok = Form.edit_status.in_(sets.finalised) if sets.finalised else literal(False)
     processed = and_(Form.edit_date >= a, Form.edit_date <= b)
     return {
         "received": and_(Form.received_date >= a, Form.received_date <= b),
         "edited": and_(processed, edited_ok),
-        "finalised": and_(processed, final_ok),
+        "finalised": processed,  # a handled form is finalised: no status is left out, so it lines up with Received
         "processed": processed,
         "qc_completed": and_(Form.qc_date >= a, Form.qc_date <= b),
         "pending_editing": and_(Form.received_date <= b, or_(Form.edit_date.is_(None), Form.edit_date > b)),
@@ -106,10 +107,17 @@ def pct(a: int | float | None, b: int | float | None) -> float | None:
     return round(100.0 * (a or 0) / b, 1)
 
 
+def tally(pred=None):
+    """Volume of the rows matching `pred`: the sum of their units. A row is one form, except for the projects counted
+    by images (Global Data), where a row carries as many forms as its '#images' cell says."""
+    total = func.sum(Form.units)
+    return func.coalesce(total.filter(pred) if pred is not None else total, 0)
+
+
 def _metric_columns(scope: Scope, sets: StatusSets):
     p = predicates(scope, sets)
-    cols = [func.count().filter(p[m]).label(m) for m in METRICS]
-    cols.append(func.count().filter(p["cohort_done"]).label("cohort_done"))
+    cols = [tally(p[m]).label(m) for m in METRICS]
+    cols.append(tally(p["cohort_done"]).label("cohort_done"))
     return cols
 
 
@@ -119,6 +127,10 @@ def _finish(row: dict) -> dict:
     # made the old rings read 100% whatever the filters. These are shares of one workload, so they stay in 0-100.
     out["editing_pct"] = pct(out["processed"], out["processed"] + out["pending_editing"])
     out["qc_pct"] = pct(out["qc_completed"], out["qc_completed"] + out["qc_pending"])
+    # what became of the forms received in the period: handled by the period end, or still waiting. The two add up to
+    # `received` exactly (unlike pending_editing, which also holds the backlog received before the period).
+    out["received_handled"] = min(int(row.get("cohort_done") or 0), out["received"])
+    out["received_pending"] = out["received"] - out["received_handled"]
     out["completion_pct"] = pct(row.get("cohort_done"), out["received"])
     out["edited_rate_pct"] = pct(out["edited"], out["received"])
     return out
@@ -218,7 +230,7 @@ def timeseries(db: Session, scope: Scope, g: str) -> list[dict]:
                                         buckets(scope.date_from, scope.date_to, g)}
     for name, (col, pred) in series.items():
         trunc = func.date_trunc(g, col).cast(Date).label("b")
-        q = (_form_from().add_columns(trunc, func.count().label("n"))
+        q = (_form_from().add_columns(trunc, tally().label("n"))
              .where(*dim_conditions(scope), pred).group_by(trunc))
         for r in db.execute(q):
             data.setdefault(r.b, {m: 0 for m in series})[name] = int(r.n)

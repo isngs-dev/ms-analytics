@@ -73,7 +73,7 @@ function StatusMap() {
   return (
     <Card>
       <p className="mb-3 text-sm text-muted-foreground">
-        Defines what counts as <strong>Edited</strong> and <strong>Finalised</strong>. Changes apply to all history immediately (no re-sync needed).
+        Defines what counts as <strong>Edited</strong>. (<strong>Finalised</strong> counts every handled form, whatever its status.) Changes apply to all history immediately (no re-sync needed).
         Only <em>Edited &amp; Saved</em> counts as Edited by default. Values listed under “Unmapped statuses” on Data Health can be added here.
       </p>
       <div className="mb-3 flex flex-wrap items-end gap-2">

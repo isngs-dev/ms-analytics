@@ -11,7 +11,7 @@ from sqlalchemy import delete, insert, select, update
 from sqlalchemy.orm import Session
 
 from ..models import (
-    ClientAlias, DimClient, DimErrorCategory, DimPerson, DimProject, Escalation, Form, PersonAlias,
+    AppSetting, ClientAlias, DimClient, DimErrorCategory, DimPerson, DimProject, Escalation, Form, PersonAlias,
     Rework, SrcFile, SrcRecord, SrcSheet, StatusMap, SyncIssue,
 )
 from .discover import ParsedName
@@ -38,6 +38,46 @@ def _cap(v: str | None, n: int) -> str | None:
     return v if v is None or len(v) <= n else v[:n]
 
 
+# Projects whose volume is the number of images (photos) in a row, not the row itself. The Global Data sheet has
+# an '#images' column; each row is one shop with N photos and N is the form count. AppSetting 'image_count_projects'
+# = {"projects": [...]} overrides the list.
+IMAGE_COUNT_KEY = "image_count_projects"
+DEFAULT_IMAGE_PROJECTS = ("global data",)
+_IMAGES_HEADER = re.compile(r"^(no\.?|number|num|count)?(of)?(images?|photos?|pics?)(count)?$")
+
+
+def image_header(extras: dict) -> str | None:
+    """Key of the '#images' style column among a row's unmapped cells."""
+    for k in extras:
+        if _IMAGES_HEADER.match(re.sub(r"[^a-z.]", "", str(k).lower())):
+            return k
+    return None
+
+
+def image_units(extras: dict) -> int:
+    """The row's image count; a blank or unreadable cell counts as 1 so the row is never dropped."""
+    k = image_header(extras)
+    raw = clean_text(extras.get(k)) if k else None
+    try:
+        return max(0, round(float(raw))) if raw is not None else 1
+    except ValueError:
+        return 1
+
+
+_DASH_DATE = re.compile(r"^\s*(\d{1,2})[-.](\d{1,2})[-.]\d{2,4}(?!\d)")
+
+
+def _dash_month_first(cells: list) -> bool:
+    """A sheet that writes 07-14-26 is month-first: some cell has a second number above 12 and none a first one."""
+    first_big = second_big = False
+    for v in cells:
+        m = _DASH_DATE.match(v) if isinstance(v, str) else None
+        if m:
+            first_big |= int(m.group(1)) > 12
+            second_big |= int(m.group(2)) > 12
+    return second_big and not first_big
+
+
 class Loader:
     def __init__(self, session: Session, sync_id: int):
         self.s = session
@@ -54,6 +94,8 @@ class Loader:
         self._projects = {(p.client_id, p.name.lower()): p for p in session.scalars(select(DimProject))}
         self._person_alias = {a.alias_norm: a.person_id for a in session.scalars(select(PersonAlias))}
         self._error_cats = {c.name.lower(): c.id for c in session.scalars(select(DimErrorCategory))}
+        row = session.get(AppSetting, IMAGE_COUNT_KEY)
+        self._image_projects = {str(n).lower() for n in (row.value.get("projects", []) if row else DEFAULT_IMAGE_PROJECTS)}
         self._once: set[tuple] = set()
         self._forms: dict[int, dict[tuple, Form]] = {}
         self._rework: dict[int, dict[tuple, Rework]] = {}
@@ -158,6 +200,22 @@ class Loader:
         if d is None and clean_text(raw):
             self.issue("warn", "bad_date", f"{field}: '{clean_text(raw)}'", row.row_no)
         return d
+
+    def escalation_date(self, row: SheetRow, field: str, month_first: bool) -> date | None:
+        """An escalation cannot be raised in the future. Sheets read with the wrong locale turn 10 July into 7 October
+        (or 12 July into 7 December); when the date as read lies after today and swapping day and month gives a date
+        that does not, the swapped one is the real one."""
+        raw = row.values.get(field)
+        d = parse_date(raw, dash_month_first=month_first)
+        today = date.today()
+        if d is not None and d > today:
+            if d.day <= 12 and date(d.year, d.day, d.month) <= today:
+                self.issue("info", "date_swapped", f"{field}: '{clean_text(raw)}' read as {d}, in the future; "
+                           f"taken as {date(d.year, d.day, d.month)}", row.row_no)
+                return date(d.year, d.day, d.month)
+            self.issue("warn", "bad_date", f"{field}: '{clean_text(raw)}' is in the future", row.row_no)
+            return None
+        return self.date(row, field) if d is None else (d if MIN_DATE <= d else None)
 
     def error_category(self, raw: Any) -> int | None:
         name = clean_text(raw)
@@ -296,6 +354,7 @@ class Loader:
                 comments_to_shopper=clean_text(r.values.get("comments_to_shopper")),
                 qc_feedback=clean_text(r.values.get("qc_feedback")),
                 extra={k: v for k, v in extra.items() if v},
+                units=image_units(r.extras) if project.name.lower() in self._image_projects else 1,
             )
             ident = (project.id, job)
             row_hash = _hash(values)
@@ -406,6 +465,7 @@ class Loader:
             client.id, {e.row_hash: e for e in self.s.scalars(
                 select(Escalation).where(Escalation.client_id == client.id))})
         forms = self._forms_for(client.id)
+        month_first = _dash_month_first([r.values.get("raised_date") for r in sheet.rows])
         for r in sheet.rows:
             job = norm_job_id(r.values.get("job_id"))
             if not valid_job(job):
@@ -423,7 +483,7 @@ class Loader:
             else:
                 project = next(p for p in self._projects.values() if p.id == pid)
             vals = dict(
-                job_id=job, raised_date=self.date(r, "raised_date"),
+                job_id=job, raised_date=self.escalation_date(r, "raised_date", month_first),
                 editor_type=_cap(clean_text(r.values.get("editor_type")), 32),
                 editor_id=self.person(r.values.get("editor_name")),
                 qc_member_id=self.person(r.values.get("qc_member")), qc_date=self.date(r, "qc_date"),
