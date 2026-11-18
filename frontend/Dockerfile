@@ -7,6 +7,10 @@ FROM node:22-bookworm-slim AS build
 # Next bakes the /api/* proxy target in at build time
 ARG API_INTERNAL_URL=http://api:8000
 ENV API_INTERNAL_URL=$API_INTERNAL_URL NEXT_TELEMETRY_DISABLED=1
+# Optional "Demo logins" box on the login page (a test site only): set both as Render env vars, nothing is stored in git
+ARG NEXT_PUBLIC_DEMO_LOGINS=
+ARG NEXT_PUBLIC_DEMO_PASSWORD=
+ENV NEXT_PUBLIC_DEMO_LOGINS=$NEXT_PUBLIC_DEMO_LOGINS NEXT_PUBLIC_DEMO_PASSWORD=$NEXT_PUBLIC_DEMO_PASSWORD
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .

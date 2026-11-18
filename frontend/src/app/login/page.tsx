@@ -58,7 +58,7 @@ function LoginForm() {
   );
 }
 
-// Shown only when NEXT_PUBLIC_DEMO_LOGINS=1 (set in frontend/.env.local for local use, never in production).
+// Shown only when NEXT_PUBLIC_DEMO_LOGINS=1: in frontend/.env.local locally, or as a build-time env var on a test deployment.
 const DEMO = process.env.NEXT_PUBLIC_DEMO_LOGINS === "1";
 const DEMO_PASSWORD = process.env.NEXT_PUBLIC_DEMO_PASSWORD ?? "";
 const DEMO_ACCOUNTS = [
