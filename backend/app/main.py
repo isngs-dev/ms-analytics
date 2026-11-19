@@ -24,6 +24,14 @@ async def lifespan(app: FastAPI):
             db.commit()
     except Exception:
         pass
+    try:  # a fresh database (a new Render deploy) has no column / status / sheet rules: add whatever default is missing
+        from .db import SessionLocal
+        from .seed.mapping import seed_mappings
+        with SessionLocal() as db:
+            seed_mappings(db)
+            db.commit()
+    except Exception:
+        pass
     if settings.scheduler_enabled:
         minutes = settings.sync_interval_minutes
         try:  # the Admin screen's refresh interval wins over the env default

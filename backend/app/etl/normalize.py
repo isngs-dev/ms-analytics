@@ -92,3 +92,22 @@ def norm_job_id(v: Any) -> str | None:
     if re.fullmatch(r"\d+\.0+", s):
         s = s.split(".")[0]
     return s
+
+
+_NOT_A_PERSON = {"na", "n/a", "none", "nil", "tbd", "yes", "no", "null", "-", "--"}
+
+
+def is_person_name(v: Any) -> bool:
+    """An Editor / QC cell that holds a date, a number or a placeholder is a shifted column, not a person."""
+    s = clean_text(v)
+    return bool(s) and re.search(r"[A-Za-z]{2}", s) is not None and s.lower() not in _NOT_A_PERSON
+
+
+def norm_editor_type(v: Any) -> str | None:
+    """The Editor column says 'iSN Team' or 'Freelancer'; anything else (a date from a shifted column, a name) is unknown."""
+    s = (clean_text(v) or "").lower()
+    if "isn" in s:
+        return "iSN Team"
+    if "freelanc" in s:
+        return "Freelancer"
+    return None

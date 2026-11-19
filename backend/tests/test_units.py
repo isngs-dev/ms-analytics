@@ -223,3 +223,12 @@ def test_render_without_a_database_url_names_the_settings_it_can_see(monkeypatch
         Settings(database_url=_DEFAULT_DB).assert_safe()  # note: no ENVIRONMENT=production needed
     msg = str(e.value)
     assert "JWT_SECRET" in msg and "DB_URL_TYPO" in msg and "secret-value" not in msg
+
+
+def test_people_and_editor_types_reject_shifted_columns():
+    from app.etl.normalize import is_person_name, norm_editor_type
+    assert is_person_name("Swapnali M") and is_person_name("Geeta Kamath/Sam")
+    for junk in ("06-09-2025", "6/2/25", "2024-07-29 00:00:00", "50.0", "N/A", "-", None, ""):
+        assert not is_person_name(junk)
+    assert norm_editor_type("iSN Team") == "iSN Team" and norm_editor_type("freelancer") == "Freelancer"
+    assert norm_editor_type("06-09-2025") is None and norm_editor_type(None) is None

@@ -15,7 +15,7 @@ from ..models import (
     Rework, SrcFile, SrcRecord, SrcSheet, StatusMap, SyncIssue,
 )
 from .discover import ParsedName
-from .normalize import clean_text, norm_header, norm_job_id, norm_key, parse_date
+from .normalize import clean_text, is_person_name, norm_editor_type, norm_header, norm_job_id, norm_key, parse_date
 from .parse_sheet import EXTRA_FIELDS, ParsedSheet, SheetRow
 
 
@@ -161,8 +161,8 @@ class Loader:
 
     def person(self, raw: Any) -> int | None:
         name = _cap(clean_text(raw), 128)
-        if not name:
-            return None
+        if not name or not is_person_name(name):
+            return None  # a date / number / placeholder in a person column is not a person
         pid = self._person_alias.get(name.lower())
         if pid is None:
             p = DimPerson(name=name)
@@ -343,7 +343,7 @@ class Loader:
                 platform=_cap(clean_text(r.values.get("platform")), 32),
                 received_date=received, shop_date=self.date(r, "shop_date"),
                 edit_date=edit_d, qc_date=qc_d,
-                editor_type=_cap(clean_text(r.values.get("editor_type")), 32),
+                editor_type=norm_editor_type(r.values.get("editor_type")),
                 editor_id=editor_id, qc_member_id=qc_member_id,
                 input_status=self.status("input_status", r.values.get("input_status")),
                 edit_status=edit_status, qc_status=qc_status,
@@ -432,7 +432,7 @@ class Loader:
                 form_name=clean_text(r.values.get("form_name")),
                 location=clean_text(r.values.get("location")),
                 received_date=self.date(r, "received_date"), shop_date=self.date(r, "shop_date"),
-                rw_date=rw_date, editor_type=_cap(clean_text(r.values.get("editor_type")), 32),
+                rw_date=rw_date, editor_type=norm_editor_type(r.values.get("editor_type")),
                 rw_editor_id=self.person(r.values.get("editor_name")),
                 rw_status=self.status("edit_status", r.values.get("edit_status")),
                 qc_member_id=self.person(r.values.get("qc_member")), qc_date=self.date(r, "qc_date"),
@@ -484,7 +484,7 @@ class Loader:
                 project = next(p for p in self._projects.values() if p.id == pid)
             vals = dict(
                 job_id=job, raised_date=self.escalation_date(r, "raised_date", month_first),
-                editor_type=_cap(clean_text(r.values.get("editor_type")), 32),
+                editor_type=norm_editor_type(r.values.get("editor_type")),
                 editor_id=self.person(r.values.get("editor_name")),
                 qc_member_id=self.person(r.values.get("qc_member")), qc_date=self.date(r, "qc_date"),
                 client_feedback=clean_text(r.values.get("client_feedback")),
