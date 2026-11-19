@@ -11,6 +11,7 @@ from ..db import SessionLocal
 from ..etl.sources import SheetSource
 from ..etl.sync import run_sync
 from ..models import SyncLog
+from . import cache
 
 _lock = threading.Lock()
 _mock_cache: SheetSource | None = None
@@ -37,6 +38,9 @@ def get_source() -> SheetSource:
     raise SyncUnavailable(f"unknown DATA_SOURCE '{settings.data_source}'")
 
 
+from . import cache  # noqa: E402
+
+
 def running_sync(db) -> SyncLog | None:
     cutoff = datetime.now(timezone.utc) - STALE_AFTER
     return db.scalar(select(SyncLog).where(SyncLog.status == "running", SyncLog.started_at > cutoff)
@@ -47,6 +51,7 @@ def run_sync_job(trigger: str, force: bool = False) -> None:
     """Entry point for background tasks and the scheduler. Never raises."""
     if not _lock.acquire(blocking=False):
         return
+    cache.begin_sync()
     try:
         with SessionLocal() as db:
             if running_sync(db):
@@ -59,4 +64,5 @@ def run_sync_job(trigger: str, force: bool = False) -> None:
                                error_text=f"{type(exc).__name__}: {exc}"[:2000]))
                 db.commit()
     finally:
+        cache.end_sync()
         _lock.release()

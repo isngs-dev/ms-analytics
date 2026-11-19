@@ -8,6 +8,7 @@ import { ChartCard, ChartSkeleton, DeltaBadge, PageHeader, QueryError } from "@/
 import { TrendChart } from "@/components/charts";
 import { DriverTip } from "@/components/driver-tip";
 import { WeekGridCard } from "@/components/week-grid-card";
+import { Lazy } from "@/components/lazy";
 import { useCompare, useOverview, useTimeseries } from "@/lib/hooks";
 import { useFilterStore } from "@/lib/store";
 import { fmtDate, fmtInt } from "@/lib/format";
@@ -172,7 +173,7 @@ export default function TimePage() {
         )}
       </ChartCard>
 
-      <WeekGridCard />
+      <Lazy height={320}><WeekGridCard /></Lazy>
 
       <PeriodByPeriod period={ov.data?.period} />
 

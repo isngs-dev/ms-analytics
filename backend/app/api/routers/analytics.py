@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from ...db import get_db
 from ...models import DimClient, DimPerson, DimProject, Form, SyncLog
 from ...services import compare as cmp
+from ...services.cache import cached
 from ...services import metrics
 from ...services import quality as quality_svc
 from ...services import trends
@@ -22,16 +23,14 @@ def _period(scope: Scope) -> dict:
     return {"from": scope.date_from.isoformat(), "to": scope.date_to.isoformat()}
 
 
-@router.get("/meta/filters")
-def filter_options(db: Session = Depends(get_db)):
+@cached("filter_values")
+def _filter_values(db: Session) -> dict:
     live = Form.deleted_at.is_(None)  # clients / projects / people / statuses that only exist in removed years stay out
     people = db.execute(select(DimPerson.id, DimPerson.name).order_by(DimPerson.name)).all()
     editors = set(db.scalars(select(Form.editor_id).where(Form.editor_id.is_not(None), live).distinct()))
     qcs = set(db.scalars(select(Form.qc_member_id).where(Form.qc_member_id.is_not(None), live).distinct()))
     live_clients = set(db.scalars(select(Form.client_id).where(live).distinct()))
     live_projects = set(db.scalars(select(Form.project_id).where(live).distinct()))
-    last = db.scalar(select(SyncLog).where(SyncLog.status.in_(["ok", "partial"]))
-                     .order_by(SyncLog.id.desc()).limit(1))
     return {
         "clients": [{"id": i, "name": n} for i, n in db.execute(select(DimClient.id, DimClient.name)
                                                                  .order_by(DimClient.name)) if i in live_clients],
@@ -47,17 +46,26 @@ def filter_options(db: Session = Depends(get_db)):
         "editor_types": sorted(s for s in db.scalars(select(Form.editor_type).where(live).distinct()) if s),
         "data_range": dict(zip(("from", "to"), [d.isoformat() if d else None for d in db.execute(
             select(func.min(Form.received_date), func.max(Form.received_date)).where(live)).one()])),
-        "last_sync": {"id": last.id, "finished_at": last.finished_at, "status": last.status} if last else None,
     }
 
 
+@router.get("/meta/filters")
+def filter_options(db: Session = Depends(get_db)):
+    out = dict(_filter_values(db=db))  # heavy part cached; the sync stamp is always fresh
+    last = db.scalar(select(SyncLog).where(SyncLog.status.in_(["ok", "partial"])).order_by(SyncLog.id.desc()).limit(1))
+    out["last_sync"] = {"id": last.id, "finished_at": last.finished_at, "status": last.status} if last else None
+    return out
+
+
 @router.get("/analytics/overview")
+@cached("overview")
 def overview(scope: Scope = Depends(scope_params), db: Session = Depends(get_db)):
     return {"period": _period(scope), "filters": scope.dims(), "metrics": metrics.overview(db, scope),
             "definitions": metrics.DEFINITIONS}
 
 
 @router.get("/analytics/breakdown")
+@cached("breakdown")
 def breakdown(by: str = Query(..., description=" | ".join(metrics.BREAKDOWNS)),
               scope: Scope = Depends(scope_params), db: Session = Depends(get_db)):
     if by not in metrics.BREAKDOWNS:
@@ -66,6 +74,7 @@ def breakdown(by: str = Query(..., description=" | ".join(metrics.BREAKDOWNS)),
 
 
 @router.get("/analytics/quality")
+@cached("quality")
 def quality(by: str = Query("client", pattern="^(client|project)$"),
             scope: Scope = Depends(scope_params), db: Session = Depends(get_db)):
     """How many reports were edited, and how many of them came back (client escalation)."""
@@ -73,6 +82,7 @@ def quality(by: str = Query("client", pattern="^(client|project)$"),
 
 
 @router.get("/analytics/forms-compare")
+@cached("forms_compare")
 def forms_compare(vs: str = Query("previous", pattern="^(previous|yoy)$"),
                   scope: Scope = Depends(scope_params), db: Session = Depends(get_db)):
     """Every form name inside every project, the selected period against the previous period (or last year)."""
@@ -80,6 +90,7 @@ def forms_compare(vs: str = Query("previous", pattern="^(previous|yoy)$"),
 
 
 @router.get("/analytics/change-drivers")
+@cached("change_drivers")
 def change_drivers(metric: str, cur_from: date, cur_to: date, prev_from: date, prev_to: date,
                    limit: int = Query(8, ge=1, le=30),
                    scope: Scope = Depends(scope_params), db: Session = Depends(get_db)):
@@ -93,6 +104,7 @@ def change_drivers(metric: str, cur_from: date, cur_to: date, prev_from: date, p
 
 
 @router.get("/analytics/forms-months")
+@cached("forms_months")
 def forms_months(metric: str = Query("received", description=" | ".join(trends.DROP_METRICS)),
                  scope: Scope = Depends(scope_params), db: Session = Depends(get_db)):
     """Every form of every project, month by month across the selected period (e.g. the whole of 2026)."""
@@ -102,6 +114,7 @@ def forms_months(metric: str = Query("received", description=" | ".join(trends.D
 
 
 @router.get("/analytics/week-grid")
+@cached("week_grid")
 def week_grid(metric: str = Query("received", description=" | ".join(trends.WEEK_METRICS)),
               scope: Scope = Depends(scope_params), db: Session = Depends(get_db)):
     """Monday-Sunday weeks of every month in the period, a cell per day, each week against the previous week and
@@ -112,6 +125,7 @@ def week_grid(metric: str = Query("received", description=" | ".join(trends.WEEK
 
 
 @router.get("/analytics/month-drivers")
+@cached("month_drivers")
 def month_drivers(metric: str = Query("received", description=" | ".join(trends.DROP_METRICS)),
                   scope: Scope = Depends(scope_params), db: Session = Depends(get_db)):
     """Month by month: which projects / forms pulled the volume down (and which pushed it up)."""
@@ -121,6 +135,7 @@ def month_drivers(metric: str = Query("received", description=" | ".join(trends.
 
 
 @router.get("/analytics/timeseries")
+@cached("timeseries")
 def timeseries(granularity: str = "day", scope: Scope = Depends(scope_params),
                db: Session = Depends(get_db)):
     if granularity not in metrics.GRANULARITIES:
@@ -132,6 +147,7 @@ def timeseries(granularity: str = "day", scope: Scope = Depends(scope_params),
 
 
 @router.get("/analytics/projects/{pid}")  # not `project_id`: that name is a filter query param
+@cached("project_detail")
 def project_detail(pid: int, scope: Scope = Depends(scope_params), db: Session = Depends(get_db)):
     p = db.get(DimProject, pid)
     if p is None:
@@ -148,6 +164,7 @@ def project_detail(pid: int, scope: Scope = Depends(scope_params), db: Session =
 
 
 @router.get("/analytics/compare")
+@cached("compare")
 def compare(mode: str = "month_vs_prev_month", anchor: date | None = None,
             scope: Scope = Depends(scope_params), db: Session = Depends(get_db)):
     if mode not in cmp.MODES:
@@ -158,6 +175,7 @@ def compare(mode: str = "month_vs_prev_month", anchor: date | None = None,
 
 
 @router.get("/analytics/alerts")
+@cached("alerts")
 def alerts(anchor: date | None = None, scope: Scope = Depends(scope_params), db: Session = Depends(get_db)):
     """Month-over-month volume / pending alerts.
 

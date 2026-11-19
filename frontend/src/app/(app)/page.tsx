@@ -11,6 +11,7 @@ import { WorkloadDonuts } from "@/components/workload-donuts";
 import { QualityCard } from "@/components/quality-card";
 import { MonthDriversCard } from "@/components/month-drivers-card";
 import { FormsCompareCard } from "@/components/forms-compare-card";
+import { Lazy } from "@/components/lazy";
 import { useWide } from "@/lib/visual";
 import { useAlerts, useBreakdown, useOverview, useTimeseries } from "@/lib/hooks";
 import { useDrill } from "@/lib/drill";
@@ -67,9 +68,9 @@ export default function OverallPage() {
           detail={m ? `of ${fmtInt(m.received)} received in the period` : undefined} />
       </section>
 
-      <QualityCard />
-      <MonthDriversCard />
-      <FormsCompareCard />
+      <Lazy height={320}><QualityCard /></Lazy>
+      <Lazy height={320}><MonthDriversCard /></Lazy>
+      <Lazy height={320}><FormsCompareCard /></Lazy>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-3">
         <ChartCard className="xl:col-span-2" title="Activity over time" subtitle="Each line is counted by its own date"

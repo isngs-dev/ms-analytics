@@ -507,3 +507,20 @@ def test_change_drivers_endpoint(api, data):
     assert body["decliners"][0]["project"] == "P1" and body["decline_total"] == -6
     assert api.get("/api/analytics/change-drivers", params={**q, "metric": "rework"}).status_code == 422
     assert api.get("/api/analytics/change-drivers", params={**q, "cur_from": "2026-03-01"}).status_code == 422
+
+
+def test_cached_answers_follow_the_data(api, engine):
+    """A repeated question is answered from the cache, and a write to the forms empties it at once."""
+    from sqlalchemy.orm import Session
+    from app.models import Form
+    from app.services import cache
+    login(api)
+    first = api.get("/api/analytics/overview", params=JAN).json()["metrics"]["received"]
+    before = cache.hits
+    assert api.get("/api/analytics/overview", params=JAN).json()["metrics"]["received"] == first
+    assert cache.hits == before + 1
+    with Session(engine) as s:  # the TEST database, never the real one
+        f = s.query(Form).filter(Form.received_date.between(date(2026, 1, 1), date(2026, 1, 31)), Form.deleted_at.is_(None)).first()
+        f.units = (f.units or 1) + 5
+        s.commit()
+    assert api.get("/api/analytics/overview", params=JAN).json()["metrics"]["received"] == first + 5

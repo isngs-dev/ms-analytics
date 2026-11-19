@@ -8,6 +8,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, aliased
 
 from ...db import get_db
+from ...services.cache import cached
 from ...models import AppUser, DimClient, DimErrorCategory, DimPerson, DimProject, Escalation
 from ...services import escalation_scope
 from ...services.scope import Scope, scope_params
@@ -30,6 +31,7 @@ def _group(db: Session, where: list, key, label, joins=()):
 
 
 @router.get("/summary")
+@cached("summary")
 def summary(scope: Scope = Depends(scope_params), db: Session = Depends(get_db)):
     where = _where(scope)
     Ed = aliased(DimPerson)

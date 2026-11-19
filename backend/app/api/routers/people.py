@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ...db import get_db
+from ...services.cache import cached
 from ...models import DimPerson
 from ...services import metrics
 from ...services.scope import Scope, scope_params
@@ -19,6 +20,7 @@ def _period(scope: Scope) -> dict:
 
 
 @router.get("/editors")
+@cached("editor_productivity")
 def editor_productivity(scope: Scope = Depends(scope_params), db: Session = Depends(get_db)):
     """Per-editor output (processed = every form they handled), plus the comparison chart data."""
     rows = [r for r in metrics.breakdown(db, scope, "editor")]
@@ -28,6 +30,7 @@ def editor_productivity(scope: Scope = Depends(scope_params), db: Session = Depe
 
 
 @router.get("/editors/{eid}")  # not `editor_id`: that name is a filter query param
+@cached("editor_detail")
 def editor_detail(eid: int, granularity: str = "week", scope: Scope = Depends(scope_params),
                   db: Session = Depends(get_db)):
     person = db.get(DimPerson, eid)
@@ -44,6 +47,7 @@ def editor_detail(eid: int, granularity: str = "week", scope: Scope = Depends(sc
 
 
 @router.get("/qc")
+@cached("qc_members")
 def qc_members(scope: Scope = Depends(scope_params), db: Session = Depends(get_db)):
     """QC work per member (completed, by date) and the QC backlog by project."""
     members = [r for r in metrics.breakdown(db, scope, "qc_member") if r["qc_completed"]]
@@ -57,6 +61,7 @@ def qc_members(scope: Scope = Depends(scope_params), db: Session = Depends(get_d
 
 
 @router.get("/qc/{mid}")
+@cached("qc_member_detail")
 def qc_member_detail(mid: int, granularity: str = "week", scope: Scope = Depends(scope_params),
                      db: Session = Depends(get_db)):
     person = db.get(DimPerson, mid)
