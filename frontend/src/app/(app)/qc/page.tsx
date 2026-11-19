@@ -34,7 +34,7 @@ export default function QcPage() {
               keys={["qc_completed"]} />
           )}
         </ChartCard>
-        <ChartCard title="QC backlog by project" subtitle="Edited forms waiting for QC at period end (QC-enabled projects only)">
+        <ChartCard title="QC backlog by project" subtitle="Forms waiting for QC at period end (QC-enabled projects only)">
           {qc.isLoading ? <ChartSkeleton /> : (
             <RankBars rows={(qc.data?.backlog_by_project ?? []).map((r) => ({ id: r.project_id, name: r.project, values: { qc_pending: r.qc_pending, qc_completed: r.qc_completed } }))}
               keys={["qc_pending", "qc_completed"]} onClick={(r) => r.id && patch({ project_id: r.id })} />

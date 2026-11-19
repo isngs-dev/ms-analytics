@@ -45,7 +45,7 @@ function ListView({ by, onPick }: { by: "client" | "project"; onPick: (r: BreakR
   return (
     <div className="space-y-4">
       {q.isError && <QueryError error={q.error} />}
-      <ChartCard title={by === "client" ? "All clients" : "All projects"} subtitle="Received, edited, pending, QC and completion % for the selected period">
+      <ChartCard title={by === "client" ? "All clients" : "All projects"} subtitle="Received, finalised, QC and completion % for the selected period">
         {q.isLoading ? <ChartSkeleton h={200} /> : (
           <MetricTable rows={rows} firstLabel={by === "client" ? "Client" : "Project"} onRow={onPick} showParent={by === "project"} caption={`Metrics by ${by}`} />
         )}
@@ -67,18 +67,17 @@ function ProjectView({ id }: { id: number }) {
   if (q.isError) return <QueryError error={q.error} />;
   const d = q.data;
   const m = d?.metrics;
-  const KP: [MetricKey, string][] = [["received", "Received"], ["edited", "Edited"], ["pending_editing", "Pending"], ["qc_completed", "QC completed"], ["qc_pending", "QC pending"]];
+  const KP: [MetricKey, string][] = [["received", "Received"], ["qc_completed", "QC completed"], ["qc_pending", "QC pending"]];
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <h2 className="text-lg font-semibold">{d?.project.name}</h2>
         {d && <Badge tone={d.project.qc_applicable ? "brand" : "neutral"}>{d.project.qc_applicable ? "QC applicable" : "No QC"}</Badge>}
       </div>
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
         {KP.map(([k, l]) => <KpiCard key={k} label={l} value={m?.[k]} loading={q.isLoading} tone={k.includes("pending") ? "warn" : "brand"} onClick={() => show({ metric: k, title: `${d?.project.name}: ${l}` })} />)}
       </div>
-      <div className="grid gap-3 sm:grid-cols-3">
-        <RingStat label="Editing workload cleared" pct={m?.editing_pct} detail={m ? `${m.processed} handled · ${m.pending_editing} pending` : undefined} />
+      <div className="grid gap-3 sm:grid-cols-2">
         <RingStat label="QC workload cleared" pct={m?.qc_pct} tone="good" detail={m ? `${m.qc_completed} done · ${m.qc_pending} pending` : undefined} />
         <RingStat label="Received forms processed" pct={m?.completion_pct} tone="good" detail={m ? `of ${m.received} received` : undefined} />
       </div>
@@ -87,11 +86,11 @@ function ProjectView({ id }: { id: number }) {
       </ChartCard>
       <div className="grid gap-4 lg:grid-cols-2">
         <ChartCard title="Editors on this project" subtitle="Click a bar to focus on an editor">
-          <RankBars rows={(d?.by_editor ?? []).map((r) => ({ id: r.id, name: r.name, values: { edited: r.edited, finalised: r.finalised, pending_editing: r.pending_editing } }))}
-            keys={["edited", "finalised", "pending_editing"]} stacked onClick={(r) => r.id && patch({ editor_id: r.id })} />
+          <RankBars rows={(d?.by_editor ?? []).map((r) => ({ id: r.id, name: r.name, values: { finalised: r.finalised } }))}
+            keys={["finalised"]} stacked onClick={(r) => r.id && patch({ editor_id: r.id })} />
         </ChartCard>
         <ChartCard title="Forms in this project">
-          <RankBars rows={(d?.by_form ?? []).map((r) => ({ name: r.name, values: { received: r.received, edited: r.edited } }))} keys={["received", "edited"]} />
+          <RankBars rows={(d?.by_form ?? []).map((r) => ({ name: r.name, values: { received: r.received } }))} keys={["received"]} />
         </ChartCard>
       </div>
     </div>

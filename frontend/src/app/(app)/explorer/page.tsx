@@ -13,7 +13,7 @@ import { useApiFilters, useMe } from "@/lib/hooks";
 import { label } from "@/lib/format";
 import type { RecordsResp } from "@/lib/types";
 
-const METRICS = ["received", "edited", "finalised", "processed", "qc_completed", "pending_editing", "qc_pending"];
+const METRICS = ["received", "finalised", "processed", "qc_completed", "qc_pending"];
 
 function Explorer() {
   const sp = useSearchParams();

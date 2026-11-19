@@ -23,7 +23,12 @@ function Stat({ label, value, hint, onClick }: { label: string; value: string; h
   );
 }
 
-/** Big gauge: the share of edited reports that went through quality check. */
+const QC_DEFINITION =
+  "Quality checked = of the reports in projects that have a QC step, the share with a QC Date by the period end. "
+  + "Client escalations = the escalations on the Escalations page for the same filters (raised in the period). "
+  + "Escalation-free = reports without a client escalation.";
+
+/** Big gauge: the share of reports that went through quality check. */
 function Gauge({ pct, done, scope }: { pct: number | null | undefined; done: number; scope: number }) {
   const p = Math.max(0, Math.min(100, pct ?? 0));
   return (
@@ -36,14 +41,14 @@ function Gauge({ pct, done, scope }: { pct: number | null | undefined; done: num
       </div>
       <div className="min-w-0">
         <p className="text-xs uppercase tracking-wider text-muted-foreground">Quality checked</p>
-        <p className="mt-1 text-sm"><b className="tabular">{fmtInt(done)}</b> of <b className="tabular">{fmtInt(scope)}</b> edited reports have been through QC</p>
+        <p className="mt-1 text-sm"><b className="tabular">{fmtInt(done)}</b> of <b className="tabular">{fmtInt(scope)}</b> reports have been through QC</p>
         <p className="mt-1 text-xs text-muted-foreground">Only projects that have a QC step are counted.</p>
       </div>
     </div>
   );
 }
 
-/** What share of the edited reports was quality-checked (QC), and how many came back as client escalations. */
+/** What share of the reports was quality-checked (QC), and how many came back as client escalations. */
 export function QualityCard() {
   const [by, setBy] = useState<"client" | "project">("client");
   const q = useQuality(by);
@@ -61,7 +66,7 @@ export function QualityCard() {
             <MessageSquareWarning className="h-4 w-4 text-primary" /> Quality check (QC) &amp; client escalations
           </h2>
           <p className="max-w-3xl text-xs text-muted-foreground">
-            {q.data?.definition ?? "Share of the edited reports that were quality-checked."} Follows every filter above, so pick a client to see its own quality check.
+            {QC_DEFINITION} Follows every filter above, so pick a client to see its own quality check.
           </p>
         </div>
         <Tabs label="Break down by" value={by} onChange={setBy} items={[{ value: "client", label: "By client" }, { value: "project", label: "By project" }]} />
@@ -72,13 +77,10 @@ export function QualityCard() {
           <div className="space-y-3">
             <Gauge pct={o!.qc_checked_pct} done={o!.qc_done} scope={o!.qc_scope} />
             <div className="grid grid-cols-2 gap-3">
-              <Stat label="Reports edited" value={fmtInt(o!.edited)}
-                hint={`all outcomes · ${fmtInt(o!.marked_edited)} marked "Edited & Saved"`}
-                onClick={() => show({ metric: "processed", title: "Reports edited (all outcomes)" })} />
-              <Stat label="Waiting for QC" value={fmtInt(o!.qc_pending)} hint="edited, QC step exists, not checked yet" />
+              <Stat label="Waiting for QC" value={fmtInt(o!.qc_pending)} hint="QC step exists, not checked yet" />
               <Stat label="Client escalations" value={fmtInt(o!.escalated)} onClick={() => router.push("/escalations")}
                 hint="raised in the period, same as the Escalations page" />
-              <Stat label="Escalation-free" value={pctText(o!.escalation_free_pct, 2)} hint={`${fmtInt(o!.clean)} of ${fmtInt(o!.edited)} reports without a client escalation`} />
+              <Stat label="Escalation-free" value={pctText(o!.escalation_free_pct, 2)} hint={`${fmtInt(o!.clean)} reports without a client escalation`} />
             </div>
           </div>
 
@@ -87,7 +89,6 @@ export function QualityCard() {
               <caption className="sr-only">Quality check and escalations by {by}</caption>
               <thead className="sticky top-0 bg-muted/90 backdrop-blur"><tr>
                 <th scope="col" className="px-3 py-2 font-medium capitalize">{by}</th>
-                <th scope="col" className="px-3 py-2 text-right font-medium">Edited</th>
                 <th scope="col" className="px-3 py-2 text-right font-medium">QC done</th>
                 <th scope="col" className="w-52 px-3 py-2 font-medium">Quality checked</th>
                 <th scope="col" className="px-3 py-2 text-right font-medium">Escalations</th>
@@ -101,7 +102,6 @@ export function QualityCard() {
                         onClick={() => patch(by === "client" ? { client_id: r.id, project_id: undefined } : { project_id: r.id })}>{r.name}</button>
                       {r.parent && <span className="block text-xs font-normal text-muted-foreground">{r.parent}</span>}
                     </th>
-                    <td className="px-3 py-2 text-right tabular">{fmtInt(r.edited)}</td>
                     <td className="px-3 py-2 text-right tabular">{r.qc_scope ? <>{fmtInt(r.qc_done)}<span className="text-xs text-muted-foreground"> / {fmtInt(r.qc_scope)}</span></> : "–"}</td>
                     <td className="px-3 py-2">
                       {r.qc_checked_pct == null ? <span className="text-xs text-muted-foreground">{r.edited ? "no QC step" : "–"}</span> : (
@@ -117,7 +117,7 @@ export function QualityCard() {
                     <td className="px-3 py-2 text-right tabular">{pctText(r.escalation_free_pct, 2)}</td>
                   </tr>
                 ))}
-                {rows.length === 0 && <tr><td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">No edited reports in this period</td></tr>}
+                {rows.length === 0 && <tr><td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">No reports in this period</td></tr>}
               </tbody>
             </table>
           </div>

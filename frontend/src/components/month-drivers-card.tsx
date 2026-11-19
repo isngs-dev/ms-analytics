@@ -6,19 +6,27 @@ import { Chart, axes, useChartColors } from "./chart";
 import { ChartSkeleton, QueryError } from "./widgets";
 import { useMonthDrivers } from "@/lib/hooks";
 import { useFilterStore } from "@/lib/store";
+import { useDrill } from "@/lib/drill";
 import { fmtInt } from "@/lib/format";
 import type { DriverMonth, DriverProject } from "@/lib/types";
 import type { EChartsOption } from "echarts";
 
 const METRICS = [
   { value: "received", label: "Forms received" },
-  { value: "edited", label: "Edited" },
   { value: "qc_completed", label: "QC completed" },
 ] as const;
 type MetricKey = (typeof METRICS)[number]["value"];
 
 const monthName = (iso: string, long = false) =>
   new Date(`${iso}T00:00:00`).toLocaleDateString("en-GB", { month: long ? "long" : "short", year: long ? "numeric" : "2-digit" });
+/** "1–19 Nov 2026" within one month, "28 Oct – 3 Nov 2026" across months. */
+const fmtRange = ([a, b]: [string, string]) => {
+  const d1 = new Date(`${a}T00:00:00`), d2 = new Date(`${b}T00:00:00`);
+  const mon = (d: Date) => d.toLocaleDateString("en-GB", { month: "short" });
+  return d1.getMonth() === d2.getMonth() && d1.getFullYear() === d2.getFullYear()
+    ? `${d1.getDate()}–${d2.getDate()} ${mon(d2)} ${d2.getFullYear()}`
+    : `${d1.getDate()} ${mon(d1)} – ${d2.getDate()} ${mon(d2)} ${d2.getFullYear()}`;
+};
 const signed = (n: number) => (n > 0 ? `+${fmtInt(n)}` : n < 0 ? `−${fmtInt(-n)}` : "0");
 const pctText = (p: number | null) => (p == null ? "new" : `${p > 0 ? "+" : p < 0 ? "−" : ""}${Math.abs(p).toFixed(1)}%`);
 const dirTone = (d: DriverMonth["direction"]) => (d === "down" ? "text-bad" : d === "up" ? "text-good" : "text-muted-foreground");
@@ -71,6 +79,7 @@ export function MonthDriversCard() {
   const [picked, setPicked] = useState<string | null>(null);
   const q = useMonthDrivers(metric);
   const patch = useFilterStore((s) => s.patch);
+  const show = useDrill((s) => s.show);
   const c = useChartColors();
   const months = useMemo(() => q.data?.months ?? [], [q.data]);
 
@@ -89,7 +98,7 @@ export function MonthDriversCard() {
       formatter: (p: unknown) => {
         const i = (p as { dataIndex: number }[])[0].dataIndex;
         const m = months[i];
-        return `<b>${monthName(m.month, true)}</b>${m.partial ? " (so far)" : ""}<br/>${fmtInt(m.previous)} → ${fmtInt(m.current)} (${signed(m.delta)}, ${pctText(m.pct_change)})`;
+        return `<b>${monthName(m.month, true)}</b>${m.partial ? " (so far)" : ""}<br/>${fmtRange(m.previous_range)}: ${fmtInt(m.previous)}<br/>${fmtRange(m.current_range)}: ${fmtInt(m.current)}<br/><b>${signed(m.delta)}</b> (${pctText(m.pct_change)})`;
       },
     },
     xAxis: { type: "category", data: months.map((m) => monthName(m.month)), ...axes(c), splitLine: { show: false } },
@@ -113,8 +122,9 @@ export function MonthDriversCard() {
             <TrendingDown className="h-4 w-4 text-bad" /> Which month went down, and which project&apos;s form pulled it down
           </h2>
           <p className="max-w-3xl text-xs text-muted-foreground">
-            Each bar is a calendar month against the month before it (the month in progress is compared with the same days of the last one).
-            Follows the filters above (client, project, editor, status…). {q.data?.definition && <>Counted as: {q.data.definition}.</>}
+            Each bar is <b>this month minus the month before it</b>, using the sheets of the kept year only. The month still running is compared with the
+            <i> same days</i> of the month before (e.g. 1–19 Nov against 1–19 Oct). Follows the filters above (client, project, editor, status…).
+            {q.data?.definition && <> Counted as: {q.data.definition}.</>}
           </p>
         </div>
         <Tabs label="Measure" value={metric} onChange={setMetric} items={METRICS.map((m) => ({ value: m.value, label: m.label }))} />
@@ -142,6 +152,7 @@ export function MonthDriversCard() {
           <div role="tablist" aria-label="Month" className="mt-2 flex gap-1 overflow-x-auto pb-1">
             {months.map((m) => (
               <button key={m.month} role="tab" aria-selected={sel?.month === m.month} onClick={() => setPicked(m.month)}
+                title={`${fmtRange(m.current_range)}: ${fmtInt(m.current)} vs ${fmtRange(m.previous_range)}: ${fmtInt(m.previous)}`}
                 className={`shrink-0 rounded-lg border px-2.5 py-1 text-xs tabular transition ${sel?.month === m.month ? "border-primary bg-primary/15" : "bg-card/50 hover:border-primary"}`}>
                 {monthName(m.month)} <span className={dirTone(m.direction)}>{signed(m.delta)}</span>
               </button>
@@ -154,8 +165,25 @@ export function MonthDriversCard() {
                 {monthName(sel.month, true)}{sel.partial && " (so far)"}: {fmtInt(sel.previous)} → {fmtInt(sel.current)}{" "}
                 <span className={dirTone(sel.direction)}>({signed(sel.delta)}, {pctText(sel.pct_change)})</span>
               </h3>
-              <p className="text-xs text-muted-foreground">
-                Compared with {monthName(sel.previous_month, true)}{sel.partial && ", first days only"}.
+              <div className="mt-2 grid gap-2 sm:grid-cols-2" aria-label="What is compared">
+                {([["This month", sel.current_range, sel.current], ["Month before", sel.previous_range, sel.previous]] as const).map(([lab, rng, n]) => (
+                  <div key={lab} className="flex items-center justify-between gap-3 rounded-xl border bg-card/50 p-3">
+                    <div className="min-w-0">
+                      <p className="text-[11px] uppercase tracking-wider text-muted-foreground">{lab}</p>
+                      <p className="text-sm font-medium">{fmtRange(rng)}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-lg font-semibold tabular">{fmtInt(n)}</p>
+                      <button className="text-xs text-primary hover:underline"
+                        onClick={() => show({ metric, title: `${label[0].toUpperCase()}${label.slice(1)} · ${fmtRange(rng)}`, extra: { date_from: rng[0], date_to: rng[1] } })}>
+                        Show these forms
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Compared with {monthName(sel.previous_month, true)}{sel.partial && ", the same first days only"}.
                 {sel.decliner_count > 0 ? <> {sel.decliner_count} project{sel.decliner_count === 1 ? "" : "s"} had forms that fell{sel.decliner_count > sel.decliners.length && ` (top ${sel.decliners.length} shown)`}.</> : null}
               </p>
               <div className="mt-3 grid gap-4 xl:grid-cols-[3fr_2fr]">

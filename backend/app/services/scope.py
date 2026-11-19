@@ -10,7 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..models import Form
+from ..models import AppSetting, Form
 
 
 @dataclass(frozen=True)
@@ -59,18 +59,31 @@ def resolve_period(year=None, quarter=None, month=None, week=None, date_from=Non
     elif year:
         a, b = date(year, 1, 1), date(year, 12, 31)
     else:
-        a, b = today - timedelta(days=29), today  # default: last 30 days
+        a, b = date(today.year, 1, 1), date(today.year, 12, 31)  # default: the whole current year
     if a > b:
         raise HTTPException(422, "date_from is after date_to")
     return a, b
 
 
+def window_start(db: Session) -> date | None:
+    """1 January of the first kept year (AppSetting 'sync_years'), or None when every year is kept. A kept workbook can
+    hold a few rows dated earlier (a 2026 sheet with last year's Input Date): those never open an older year in any
+    dropdown or in 'all years'."""
+    row = db.get(AppSetting, "sync_years")
+    years = [int(y) for y in (row.value or {}).get("years", [])] if row else []
+    return date(min(years), 1, 1) if years else None
+
+
 def data_span(db: Session, today: date | None = None) -> tuple[date, date]:
     """First and last day that has any form activity (received / edited / QC'd); ends no earlier than today."""
     today = today or date.today()
+    live = Form.deleted_at.is_(None)
     lo, hi = db.execute(select(
         func.least(func.min(Form.received_date), func.min(Form.edit_date), func.min(Form.qc_date)),
-        func.greatest(func.max(Form.received_date), func.max(Form.edit_date), func.max(Form.qc_date)))).one()
+        func.greatest(func.max(Form.received_date), func.max(Form.edit_date), func.max(Form.qc_date))).where(live)).one()
+    start = window_start(db)
+    if lo is not None and start is not None and lo < start:
+        lo = start
     return (lo or today - timedelta(days=364)), max(hi or today, today)
 
 

@@ -17,6 +17,7 @@ from ..models import (
 from .discover import ParsedName
 from .normalize import clean_text, is_person_name, norm_editor_type, norm_header, norm_job_id, norm_key, parse_date
 from .parse_sheet import EXTRA_FIELDS, ParsedSheet, SheetRow
+from .project_names import norm_project, unnamed_project_name
 
 
 def _hash(payload: dict[str, Any]) -> str:
@@ -91,7 +92,9 @@ class Loader:
         self._status = {(m.field, m.source_value_norm): m for m in session.scalars(select(StatusMap))}
         self._client_alias = {a.alias_norm: a.client_id for a in session.scalars(select(ClientAlias))}
         self._clients = {c.id: c for c in session.scalars(select(DimClient))}
-        self._projects = {(p.client_id, p.name.lower()): p for p in session.scalars(select(DimProject))}
+        self._projects: dict[tuple[int, str], DimProject] = {}
+        for p in session.scalars(select(DimProject).order_by(DimProject.id)):  # first created wins a spelling clash
+            self._projects.setdefault((p.client_id, norm_project(p.name)), p)
         self._person_alias = {a.alias_norm: a.person_id for a in session.scalars(select(PersonAlias))}
         self._error_cats = {c.name.lower(): c.id for c in session.scalars(select(DimErrorCategory))}
         row = session.get(AppSetting, IMAGE_COUNT_KEY)
@@ -142,8 +145,8 @@ class Loader:
         return self._clients[cid]
 
     def project(self, client: DimClient, name: str) -> DimProject:
-        name = _cap(clean_text(name), 256) or client.name
-        key = (client.id, name.lower())
+        name = _cap(clean_text(name), 256) or unnamed_project_name(client.name)
+        key = (client.id, norm_project(name))
         p = self._projects.get(key)
         if p is None:
             p = DimProject(client_id=client.id, name=name)
@@ -157,7 +160,7 @@ class Loader:
         if parsed.middle and not parsed.multi:
             return self.project(client, parsed.middle)
         base = (clean_text(form_name) or "").split(":")[0].strip()
-        return self.project(client, base or client.name)
+        return self.project(client, base or unnamed_project_name(client.name))
 
     def person(self, raw: Any) -> int | None:
         name = _cap(clean_text(raw), 128)
@@ -476,7 +479,7 @@ class Loader:
                 continue
             pid = jobs.get(job) if job else None
             if pid is None:
-                project = self.project(client, parsed.middle or client.name)
+                project = self.project(client, parsed.middle or unnamed_project_name(client.name))
                 if job:
                     self.issue("info", "unlinked_escalation",
                                f"job {job}: no matching form; filed under {project.name}", r.row_no)

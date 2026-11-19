@@ -65,7 +65,7 @@ export function FilterBar() {
       <div id="filters-panel" className={`${open ? "block" : "hidden"} space-y-3 px-3 pb-3 sm:px-6 lg:block lg:py-3`}>
         <fieldset className="grid grid-cols-2 items-end gap-2 sm:grid-cols-3 lg:grid-cols-6">
           <legend className="sr-only">Period</legend>
-          <Select label="Year" value={f.range === "all" ? ALL : f.year} placeholder="Last 30 days"
+          <Select label="Year" value={f.range === "all" ? ALL : f.year} placeholder={`${new Date().getFullYear()} (whole year)`}
             onChange={(v) => (v === ALL ? set({ range: "all" }) : set({ year: num(v) }))}
             options={[{ value: ALL, label: "All years" }, ...years]} />
           <Select label="Quarter" value={f.quarter} disabled={custom} onChange={(v) => set(withYear({ quarter: num(v) }))}
@@ -84,7 +84,7 @@ export function FilterBar() {
           </label>
         </fieldset>
 
-        <fieldset className="grid grid-cols-2 items-end gap-2 sm:grid-cols-3 lg:grid-cols-6">
+        <fieldset className="grid grid-cols-2 items-end gap-2 sm:grid-cols-3 lg:grid-cols-5">
           <legend className="sr-only">Scope</legend>
           <Select label="Client" value={f.client_id} onChange={setClient}
             options={(meta?.clients ?? []).map((c) => ({ value: c.id, label: c.name }))} />
@@ -92,12 +92,10 @@ export function FilterBar() {
             options={projects.map((p) => ({ value: p.id, label: p.name }))} />
           <Select label="Editor" value={f.editor_id} onChange={(v) => set({ editor_id: num(v) })}
             options={(meta?.editors ?? []).map((e) => ({ value: e.id, label: e.name }))} />
-          <Select label="Editing status" value={f.edit_status} onChange={(v) => set({ edit_status: v || undefined })}
-            options={(meta?.edit_statuses ?? []).map((s) => ({ value: s, label: s }))} />
           <Select label="QC status" value={f.qc_status} onChange={(v) => set({ qc_status: v || undefined })}
             options={(meta?.qc_statuses ?? []).map((s) => ({ value: s, label: s }))} />
           <div className="flex items-end">
-            <Button variant="ghost" size="sm" onClick={reset} disabled={!active} title="Reset filters (last 30 days)">
+            <Button variant="ghost" size="sm" onClick={reset} disabled={!active} title="Reset filters (whole current year)">
               <RotateCcw className="h-4 w-4" /> Reset
             </Button>
           </div>

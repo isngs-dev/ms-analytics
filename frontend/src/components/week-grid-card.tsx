@@ -9,7 +9,7 @@ import { fmtDate, fmtInt } from "@/lib/format";
 import type { WeekCmp, WeekRow } from "@/lib/types";
 
 const METRICS = [
-  { value: "received", label: "Received" }, { value: "edited", label: "Edited" },
+  { value: "received", label: "Received" },
   { value: "finalised", label: "Finalised" }, { value: "qc_completed", label: "QC completed" },
 ] as const;
 type MetricKey = (typeof METRICS)[number]["value"];

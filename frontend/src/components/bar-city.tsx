@@ -48,7 +48,7 @@ export function BarCity() {
   });
 
   const rows = useMemo<CityRow[]>(() => (proj.data?.rows ?? []).filter((r) => r.id != null && r.received > 0).map((r) => ({
-    id: r.id as number, name: r.name, client: r.parent ?? "?", received: r.received, edited: r.edited, handled: r.received_handled, pending: r.received_pending,
+    id: r.id as number, name: r.name, client: r.parent ?? "?", received: r.received, handled: r.received_handled,
   })), [proj.data]);
   const editors = useMemo<CityEditor[]>(() => project_id == null ? [] : (eds.data?.rows ?? []).filter((r) => r.id != null && r.processed > 0)
     .slice(0, 10).map((r) => ({ id: r.id as number, name: r.name, value: r.processed })), [eds.data, project_id]);
@@ -70,8 +70,8 @@ export function BarCity() {
   const show3D = use3D && view === "city";
   const flat = (
     <RankBars
-      rows={rows.map((r) => ({ id: r.id, name: `${r.client} · ${r.name}`, values: { received_handled: r.handled, received_pending: r.pending } }))}
-      keys={["received_handled", "received_pending"]} stacked limit={15} onClick={(b) => { const r = rows.find((x) => x.id === b.id); if (r) pickProject(r); }}
+      rows={rows.map((r) => ({ id: r.id, name: clientName ? r.name : `${r.client} · ${r.name}`, values: { received_handled: r.handled } }))}
+      keys={["received_handled"]} stacked limit={15} onClick={(b) => { const r = rows.find((x) => x.id === b.id); if (r) pickProject(r); }}
     />
   );
 
@@ -98,10 +98,10 @@ export function BarCity() {
         <summary className="cursor-pointer text-muted-foreground">View as table</summary>
         <table className="mt-2 w-full text-left">
           <caption className="sr-only">Forms received by client and project</caption>
-          <thead><tr className="text-xs text-muted-foreground"><th scope="col" className="py-1 font-medium">Client / project</th><th scope="col" className="py-1 text-right font-medium">Received</th><th scope="col" className="py-1 text-right font-medium">Handled</th><th scope="col" className="py-1 text-right font-medium">Pending</th><th scope="col" className="py-1 text-right font-medium">% handled</th></tr></thead>
+          <thead><tr className="text-xs text-muted-foreground"><th scope="col" className="py-1 font-medium">Client / project</th><th scope="col" className="py-1 text-right font-medium">Received</th><th scope="col" className="py-1 text-right font-medium">Handled</th><th scope="col" className="py-1 text-right font-medium">% handled</th></tr></thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r.id} className="border-t"><th scope="row" className="py-1 font-normal">{r.client} · {r.name}</th><td className="py-1 text-right tabular-nums">{fmtInt(r.received)}</td><td className="py-1 text-right tabular-nums">{fmtInt(r.handled)}</td><td className="py-1 text-right tabular-nums">{fmtInt(r.pending)}</td><td className="py-1 text-right tabular-nums">{r.received ? `${(100 * r.handled / r.received).toFixed(1)}%` : "–"}</td></tr>
+              <tr key={r.id} className="border-t"><th scope="row" className="py-1 font-normal">{r.client} · {r.name}</th><td className="py-1 text-right tabular-nums">{fmtInt(r.received)}</td><td className="py-1 text-right tabular-nums">{fmtInt(r.handled)}</td><td className="py-1 text-right tabular-nums">{r.received ? `${(100 * r.handled / r.received).toFixed(1)}%` : "–"}</td></tr>
             ))}
           </tbody>
         </table>

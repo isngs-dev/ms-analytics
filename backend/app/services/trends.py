@@ -308,9 +308,11 @@ def month_drivers(db: Session, scope: Scope, metric: str = "received", today: da
     # the month in progress: the previous month is cut at the same day number
     live = months[-1] if months[-1] <= today < _month_end(months[-1]) else None
     live_prev: dict[tuple[int, str], int] = {}
+    live_prev_range: tuple[date, date] | None = None
     if live is not None:
         p0 = live - relativedelta(months=1)
         p1 = min(p0 + timedelta(days=today.day - 1), _month_end(p0))
+        live_prev_range = (p0, p1)
         live_prev = {(pid, f): n for (m, pid, f), n in _month_counts(db, scope.with_range(p0, p1), metric).items()}
     names = _names(db)
 
@@ -320,6 +322,10 @@ def month_drivers(db: Session, scope: Scope, metric: str = "received", today: da
     for m in months:
         cur = of_month(m)
         prev = live_prev if m == live else of_month(m - relativedelta(months=1))
+        # the exact day ranges behind the two numbers, so the screen can say what is compared with what
+        cur_range = (m, today if m == live else _month_end(m))
+        prev_range = live_prev_range if m == live and live_prev_range else (
+            m - relativedelta(months=1), _month_end(m - relativedelta(months=1)))
         per_project: dict[int, dict] = {}
         for key in set(cur) | set(prev):
             pid, form = key
@@ -359,6 +365,8 @@ def month_drivers(db: Session, scope: Scope, metric: str = "received", today: da
             "month": m.isoformat(), "partial": m == live, "current": total_c, "previous": total_p,
             "delta": ch["delta"], "pct_change": ch["pct_change"], "direction": ch["direction"],
             "previous_month": (m - relativedelta(months=1)).isoformat(),
+            "current_range": [cur_range[0].isoformat(), cur_range[1].isoformat()],
+            "previous_range": [prev_range[0].isoformat(), prev_range[1].isoformat()],
             "decliners": decliners[:MAX_DECLINERS], "decliner_count": len(decliners),
             "gainers": gainers[:MAX_GAINERS], "gainer_count": len(gainers)})
     return base

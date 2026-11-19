@@ -8,7 +8,7 @@ import { Stage } from "./stage";
 import { AnchorSetter, useAnchors, useProjectedAnchor } from "./anchor";
 import { fmtInt } from "@/lib/format";
 
-export interface CityRow { id: number; name: string; client: string; received: number; edited: number; handled: number; pending: number }
+export interface CityRow { id: number; name: string; client: string; received: number; handled: number }
 export interface CityEditor { id: number; name: string; value: number }
 export interface CityFocus { client?: string; project?: number; editor?: number }
 
@@ -166,7 +166,7 @@ function Scene({ rows, editors, focus, set, onTip, onPickProject, onPickEditor }
             <Bar
               x={b.x} z={b.z} h={b.h} color={b.color} dim={dim} hot={isProj}
               onClick={() => onPickProject(b.row)} onTip={onTip}
-              tip={{ title: b.row.name, color: b.color, lines: [`${b.row.client}`, `Received ${fmtInt(b.row.received)}`, `Edited ${fmtInt(b.row.edited)}`, `Handled ${fmtInt(b.row.handled)}`, `Still pending ${fmtInt(b.row.pending)}`] }}
+              tip={{ title: b.row.name, color: b.color, lines: [`${b.row.client}`, `Received ${fmtInt(b.row.received)}`, `Handled ${fmtInt(b.row.handled)}`] }}
             />
             <Anchor id={`p:${b.row.id}`} x={b.x} y={b.h + 0.4} z={b.z} set={set} worldWidth={1.5}
               visible={isProj || (!focus.project && focus.client === b.row.client)} />

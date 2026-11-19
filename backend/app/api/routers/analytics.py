@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from ...db import get_db
@@ -13,7 +13,7 @@ from ...services.cache import cached
 from ...services import metrics
 from ...services import quality as quality_svc
 from ...services import trends
-from ...services.scope import Scope, scope_params
+from ...services.scope import Scope, scope_params, window_start
 from ..deps import viewer
 
 router = APIRouter(tags=["analytics"], dependencies=[viewer])
@@ -23,9 +23,22 @@ def _period(scope: Scope) -> dict:
     return {"from": scope.date_from.isoformat(), "to": scope.date_to.isoformat()}
 
 
+def _data_range(db: Session, live) -> dict:
+    lo, hi = db.execute(select(func.min(Form.received_date), func.max(Form.received_date)).where(live)).one()
+    start = window_start(db)
+    if lo is not None and start is not None and lo < start:
+        lo = start
+    return {"from": lo.isoformat() if lo else None, "to": hi.isoformat() if hi else None}
+
+
 @cached("filter_values")
 def _filter_values(db: Session) -> dict:
     live = Form.deleted_at.is_(None)  # clients / projects / people / statuses that only exist in removed years stay out
+    start = window_start(db)
+    if start is not None:
+        # a kept workbook can carry rows dated before the first kept year (a 2026 sheet with last year's Input Date):
+        # a client / project / editor / QC member who only appears on such rows is not part of the kept years
+        live = and_(live, or_(Form.received_date >= start, Form.edit_date >= start, Form.qc_date >= start))
     people = db.execute(select(DimPerson.id, DimPerson.name).order_by(DimPerson.name)).all()
     editors = set(db.scalars(select(Form.editor_id).where(Form.editor_id.is_not(None), live).distinct()))
     qcs = set(db.scalars(select(Form.qc_member_id).where(Form.qc_member_id.is_not(None), live).distinct()))
@@ -44,8 +57,7 @@ def _filter_values(db: Session) -> dict:
         "edit_statuses": sorted(s for s in db.scalars(select(Form.edit_status).where(live).distinct()) if s),
         "qc_statuses": sorted(s for s in db.scalars(select(Form.qc_status).where(live).distinct()) if s),
         "editor_types": sorted(s for s in db.scalars(select(Form.editor_type).where(live).distinct()) if s),
-        "data_range": dict(zip(("from", "to"), [d.isoformat() if d else None for d in db.execute(
-            select(func.min(Form.received_date), func.max(Form.received_date)).where(live)).one()])),
+        "data_range": _data_range(db, live),
     }
 
 

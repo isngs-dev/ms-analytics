@@ -13,7 +13,7 @@ export interface KpiDef extends Omit<HeroItem, "color"> { tone: "brand" | "good"
 
 function Grid({ items, loading }: { items: KpiDef[]; loading?: boolean }) {
   return (
-    <section aria-label="Key figures" className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+    <section aria-label="Key figures" className="grid grid-cols-2 gap-3 md:grid-cols-4">
       {items.map((k) => (
         <KpiCard key={k.key} label={k.label} tone={k.tone} hint={k.hint} loading={loading} value={k.value} onClick={k.onClick} />
       ))}

@@ -69,8 +69,8 @@ function stepChange(cur: number, prev: number): Change {
   return { current: cur, previous: prev, delta: cur - prev, pct_change: pct, direction: cur === prev ? "flat" : cur > prev ? "up" : "down" };
 }
 
-const STEP_COLS: { key: "received" | "edited" | "finalised" | "qc_completed"; label: string; less?: boolean }[] = [
-  { key: "received", label: "Received" }, { key: "edited", label: "Edited" }, { key: "finalised", label: "Finalised" },
+const STEP_COLS: { key: "received" | "finalised" | "qc_completed"; label: string; less?: boolean }[] = [
+  { key: "received", label: "Received" }, { key: "finalised", label: "Finalised" },
   { key: "qc_completed", label: "QC completed" },
 ];
 
@@ -140,8 +140,8 @@ function PeriodByPeriod({ period }: { period?: { from: string; to: string } }) {
 
 const FLAG: Record<string, string> = { volume_drop: "Volume drop", pending_growth: "Pending growing" };
 const METRICS: { key: string; label: string; lessIsBetter?: boolean }[] = [
-  { key: "received", label: "Received" }, { key: "edited", label: "Edited" }, { key: "qc_completed", label: "QC completed" },
-  { key: "pending_editing", label: "Pending editing", lessIsBetter: true }, { key: "qc_pending", label: "QC pending", lessIsBetter: true },
+  { key: "received", label: "Received" }, { key: "qc_completed", label: "QC completed" },
+  { key: "qc_pending", label: "QC pending", lessIsBetter: true },
 ];
 
 export default function TimePage() {
@@ -169,7 +169,7 @@ export default function TimePage() {
       <ChartCard title="Trend" subtitle={ov.data ? `${fmtDate(ov.data.period.from)} – ${fmtDate(ov.data.period.to)}` : undefined}
         action={<Tabs label="Granularity" value={g} onChange={setGran} items={GRANULARITIES.map((x) => ({ value: x, label: GRAN_LABEL[x] }))} />}>
         {ts.isLoading ? <ChartSkeleton /> : ts.isError ? <QueryError error={ts.error} /> : (
-          <TrendChart points={ts.data!.points} granularity={g} keys={["received", "edited", "finalised", "qc_completed"]} height={340} />
+          <TrendChart points={ts.data!.points} granularity={g} keys={["received", "finalised", "qc_completed"]} height={340} />
         )}
       </ChartCard>
 
@@ -204,13 +204,13 @@ export default function TimePage() {
 
       <Card className="mt-4">
         <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold"><Flag className="h-4 w-4 text-warn" /> Projects to watch</h2>
-        <p className="mb-3 text-xs text-muted-foreground">Flagged when incoming volume drops ≥15%, pending editing grows ≥25% (and ≥10 forms).</p>
+        <p className="mb-3 text-xs text-muted-foreground">Flagged when incoming volume drops ≥15% (and ≥10 forms).</p>
         <div className="overflow-auto rounded-xl border">
           <table className="w-full min-w-[52rem] text-left text-sm">
             <caption className="sr-only">Project comparison</caption>
             <thead className="bg-muted/80"><tr>
               <th scope="col" className="px-3 py-2 font-medium">Project</th>
-              {["Received", "Edited", "QC done", "Pending"].map((h) => <th key={h} scope="col" className="px-3 py-2 font-medium">{h}</th>)}
+              {["Received", "QC done"].map((h) => <th key={h} scope="col" className="px-3 py-2 font-medium">{h}</th>)}
               <th scope="col" className="px-3 py-2 font-medium">Flags</th>
             </tr></thead>
             <tbody>
@@ -220,16 +220,16 @@ export default function TimePage() {
                     <button className="text-primary hover:underline" onClick={() => patch({ project_id: p.project_id })}>{p.project}</button>
                     <span className="block text-xs font-normal text-muted-foreground">{p.client}</span>
                   </th>
-                  {([["received", false], ["edited", false], ["qc_completed", false], ["pending_editing", true]] as const).map(([k, less]) => (
+                  {([["received", false], ["qc_completed", false]] as const).map(([k, less]) => (
                     <td key={k} className="px-3 py-2">
                       <span className="tabular">{fmtInt(p[k].current)}</span>{" "}
                       {c && <WhyBadge change={p[k]} less={less} metric={k} projectId={p.project_id} cur={[c.current.from, c.current.to]} prev={[c.previous.from, c.previous.to]} />}
                     </td>
                   ))}
-                  <td className="px-3 py-2"><div className="flex flex-wrap gap-1">{p.flags.map((f) => <Badge key={f} tone="bad">{FLAG[f] ?? f}</Badge>)}</div></td>
+                  <td className="px-3 py-2"><div className="flex flex-wrap gap-1">{p.flags.filter((f) => f !== "pending_growth").map((f) => <Badge key={f} tone="bad">{FLAG[f] ?? f}</Badge>)}</div></td>
                 </tr>
               ))}
-              {cmp.isLoading && <tr><td colSpan={6} className="px-3 py-10 text-center text-muted-foreground">Loading…</td></tr>}
+              {cmp.isLoading && <tr><td colSpan={4} className="px-3 py-10 text-center text-muted-foreground">Loading…</td></tr>}
             </tbody>
           </table>
         </div>

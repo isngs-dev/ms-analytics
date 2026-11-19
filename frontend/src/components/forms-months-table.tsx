@@ -11,7 +11,6 @@ import type { DriverRow } from "@/lib/types";
 
 const METRICS = [
   { value: "received", label: "Forms received" },
-  { value: "edited", label: "Edited" },
   { value: "qc_completed", label: "QC completed" },
 ] as const;
 type MetricKey = (typeof METRICS)[number]["value"];

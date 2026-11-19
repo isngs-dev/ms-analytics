@@ -7,10 +7,8 @@ import type { SeriesPoint } from "@/lib/types";
 
 export const SERIES: Record<string, { label: string; color: string }> = {
   received: { label: "Received", color: COLORS.received },
-  edited: { label: "Edited", color: COLORS.edited },
   finalised: { label: "Finalised", color: COLORS.finalised },
   qc_completed: { label: "QC completed", color: COLORS.qc },
-  pending_editing: { label: "Pending editing", color: COLORS.pending },
   qc_pending: { label: "QC pending", color: "#8aa397" },
   processed: { label: "Processed", color: COLORS.edited },
   received_handled: { label: "Received & handled", color: COLORS.received },
@@ -18,7 +16,7 @@ export const SERIES: Record<string, { label: string; color: string }> = {
 };
 
 export function TrendChart({
-  points, granularity, keys = ["received", "edited", "qc_completed"], height = 300, bars = false, onClickBucket,
+  points, granularity, keys = ["received", "qc_completed"], height = 300, bars = false, onClickBucket,
 }: {
   points: SeriesPoint[]; granularity: string; keys?: (keyof SeriesPoint)[]; height?: number; bars?: boolean;
   onClickBucket?: (bucket: string) => void;

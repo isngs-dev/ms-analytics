@@ -12,17 +12,13 @@ import type { DonutDef } from "./three/donut-scene";
 
 const DonutScene = dynamic(() => import("./three/donut-scene"), { ssr: false, loading: () => <Skeleton className="h-[440px] w-full" /> });
 
-/** Editing vs QC completion: two rotating 3D donuts, or flat 2D donuts when 3D is unavailable. */
+/** QC completion: a rotating 3D donut, or a flat 2D donut when 3D is unavailable. */
 export function WorkloadDonuts({ m, onSlice }: { m?: Metrics; onSlice: (metric: MetricKey, title: string) => void }) {
   const { use3D } = useUse3D();
   if (!m) return <ChartCard title="Workload"><Skeleton className="h-[300px] w-full" /></ChartCard>;
 
   const pct = (v: number | null) => (v == null ? "–" : `${Math.round(v)}%`);
   const donuts: DonutDef[] = [
-    { title: "Editing", center: pct(m.editing_pct), slices: [
-      { name: "Handled", value: m.processed, color: COLORS.edited, onClick: () => onSlice("processed", "Forms handled") },
-      { name: "Pending editing", value: m.pending_editing, color: COLORS.pending, onClick: () => onSlice("pending_editing", "Pending editing") },
-    ] },
     { title: "QC", center: pct(m.qc_pct), slices: [
       { name: "QC completed", value: m.qc_completed, color: COLORS.qc, onClick: () => onSlice("qc_completed", "QC completed") },
       { name: "QC pending", value: m.qc_pending, color: COLORS.bad, onClick: () => onSlice("qc_pending", "QC pending") },
@@ -43,12 +39,12 @@ export function WorkloadDonuts({ m, onSlice }: { m?: Metrics; onSlice: (metric: 
 
   return (
     <Boundary fallback={flat}>
-      <ChartCard title="Editing vs QC workload" subtitle="Hover a slice for details, click for its records">
+      <ChartCard title="QC workload" subtitle="Hover a slice for details, click for its records">
         <DonutScene donuts={donuts} />
         <details className="mt-1 text-sm">
           <summary className="cursor-pointer text-muted-foreground">View as table</summary>
           <table className="mt-2 w-full text-left">
-            <caption className="sr-only">Editing and QC workload</caption>
+            <caption className="sr-only">QC workload</caption>
             <tbody>
               {donuts.flatMap((d) => d.slices.map((s) => (
                 <tr key={s.name} className="border-t"><th scope="row" className="py-1 font-normal">{d.title}: {s.name}</th><td className="py-1 text-right tabular-nums">{fmtInt(s.value)}</td></tr>

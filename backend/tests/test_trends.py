@@ -240,3 +240,22 @@ def test_received_splits_into_handled_and_still_pending(session, world):
     assert m["received_handled"] + m["received_pending"] == m["received"]
     jan = metrics_overview(session, Scope(D(2026, 1, 1), D(2026, 1, 31)))
     assert (jan["received"], jan["received_handled"], jan["received_pending"]) == (10, 0, 10)
+
+
+# ------------------------------------------------------------------------------ the compared ranges are stated, not implied
+def test_month_drivers_state_the_exact_ranges_compared(session, world):
+    out = trends.month_drivers(session, scope(), "received", today=TODAY)
+    jan, feb, mar = out["months"]
+    assert feb["current_range"] == ["2026-02-01", "2026-02-28"]
+    assert feb["previous_range"] == ["2026-01-01", "2026-01-31"]
+    assert mar["previous_range"] == ["2026-02-01", "2026-02-28"]
+    assert jan["previous_range"] == ["2025-12-01", "2025-12-31"]
+
+
+def test_month_in_progress_ranges_are_cut_to_the_same_days(session, world):
+    out = trends.month_drivers(session, Scope(D(2026, 5, 1), D(2026, 6, 30)), "received", today=TODAY)
+    may, june = out["months"]
+    assert may["current_range"] == ["2026-05-01", "2026-05-31"]
+    assert june["partial"] is True
+    assert june["current_range"] == ["2026-06-01", "2026-06-15"]   # up to today
+    assert june["previous_range"] == ["2026-05-01", "2026-05-15"]  # the same number of days

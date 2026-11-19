@@ -15,7 +15,13 @@ import type { EChartsOption } from "echarts";
 const tone = (c: Change) => (c.direction === "down" ? "bad" : c.direction === "up" ? "good" : "neutral");
 const pct = (c: Change) => (c.pct_change == null ? (c.current > 0 ? "new" : "–") : `${c.pct_change > 0 ? "+" : c.pct_change < 0 ? "−" : ""}${Math.abs(c.pct_change).toFixed(1)}%`);
 
-type Metric = "received" | "edited" | "qc_completed" | "pending_editing";
+type Metric = "received" | "qc_completed";
+
+/** "Project · form", but never "X · X" and never the project name twice ("Pizza Hut: B1 Pan · Pizza Hut: B1 Pan 30 Day"). */
+function formLabel(project: string, form: string): string {
+  const p = project.trim().toLowerCase(), f = form.trim().toLowerCase();
+  return f === p || f.startsWith(p) ? form : `${project} · ${form}`;
+}
 
 /** On a project row the badge explains itself: it lists the forms of that project that moved the number. */
 function Cell({ c, project, metric }: { c: Change; project?: FormsCompareProject; metric?: Metric }) {
@@ -58,7 +64,7 @@ export function FormsCompareCard() {
     return forms.length ? { ...p, forms } : null;
   }).filter((p): p is NonNullable<typeof p> => p != null), [d, needle]);
 
-  const top = useMemo(() => projects.flatMap((p) => p.forms.map((f) => ({ name: `${f.form} · ${p.project}`, received: f.received })))
+  const top = useMemo(() => projects.flatMap((p) => p.forms.map((f) => ({ name: formLabel(p.project, f.form), received: f.received })))
     .sort((a, b) => b.received.current + b.received.previous - (a.received.current + a.received.previous)).slice(0, 12), [projects]);
 
   const option = useMemo<EChartsOption>(() => ({
@@ -114,9 +120,7 @@ export function FormsCompareCard() {
               <thead className="sticky top-0 z-10 bg-muted/90 backdrop-blur"><tr>
                 <th scope="col" className="px-3 py-2 font-medium">Project / form</th>
                 <th scope="col" className="px-3 py-2 text-right font-medium">Received</th>
-                <th scope="col" className="px-3 py-2 text-right font-medium">Edited</th>
                 <th scope="col" className="px-3 py-2 text-right font-medium">QC completed</th>
-                <th scope="col" className="px-3 py-2 text-right font-medium">Pending editing</th>
               </tr></thead>
               <tbody>
                 {projects.map((p) => (
@@ -130,17 +134,17 @@ export function FormsCompareCard() {
                         <button className="text-primary hover:underline" onClick={() => patch({ project_id: p.project_id })}>{p.project}</button>
                         <span className="ml-2 text-xs font-normal text-muted-foreground">{p.client} · {p.form_count} form{p.form_count === 1 ? "" : "s"}</span>
                       </th>
-                      <Cell c={p.received} project={p} metric="received" /><Cell c={p.edited} project={p} metric="edited" /><Cell c={p.qc_completed} project={p} metric="qc_completed" /><Cell c={p.pending_editing} project={p} metric="pending_editing" />
+                      <Cell c={p.received} project={p} metric="received" /><Cell c={p.qc_completed} project={p} metric="qc_completed" />
                     </tr>
                     {isOpen(p.project_id) && p.forms.map((f) => (
                       <tr key={f.form} className="border-t hover:bg-muted/40">
                         <th scope="row" className="py-2 pl-10 pr-3 text-left font-normal"><span className="line-clamp-2" title={f.form}>{f.form}</span></th>
-                        <Cell c={f.received} /><Cell c={f.edited} /><Cell c={f.qc_completed} /><Cell c={f.pending_editing} />
+                        <Cell c={f.received} /><Cell c={f.qc_completed} />
                       </tr>
                     ))}
                   </Fragment>
                 ))}
-                {projects.length === 0 && <tr><td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">No forms in this period</td></tr>}
+                {projects.length === 0 && <tr><td colSpan={3} className="px-3 py-8 text-center text-muted-foreground">No forms in this period</td></tr>}
               </tbody>
             </table>
           </div>

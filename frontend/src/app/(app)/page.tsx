@@ -20,12 +20,10 @@ import { fmtDate, fmtInt } from "@/lib/format";
 import { autoGranularity, GRANULARITIES, GRAN_LABEL, Granularity } from "@/lib/period";
 import type { MetricKey } from "@/lib/types";
 
-// The first five are the 3D hero tiles (order matters); "Finalised" rides in the hero footer.
+// The first five are the 3D hero tiles (order matters); any further tile rides in the hero footer.
 // Colours are darkened so white text on the 3D tiles keeps AA contrast.
 const KPIS: { key: MetricKey; label: string; tone: "brand" | "good" | "warn" | "bad"; hint: string; color: string }[] = [
   { key: "received", label: "Forms received", tone: "brand", hint: "Input Date in period", color: "#1f7a4d" },
-  { key: "edited", label: "Edited", tone: "brand", hint: "Edited & Saved in period", color: "#2e7d4f" },
-  { key: "pending_editing", label: "Pending editing", tone: "warn", hint: "As of period end", color: "#c2410c" },
   { key: "qc_completed", label: "QC completed", tone: "good", hint: "QC Date in period", color: "#15665a" },
   { key: "qc_pending", label: "QC pending", tone: "bad", hint: "As of period end", color: "#b91c1c" },
   { key: "finalised", label: "Finalised", tone: "good", hint: "Handled (Transaction Date) in period", color: "#166534" },
@@ -39,6 +37,8 @@ export default function OverallPage() {
   const clients = useBreakdown("client");
   const projects = useBreakdown("project");
   const alerts = useAlerts();
+  // "pending editing is growing" alerts are about the Pending-editing status, which is no longer shown
+  const shownAlerts = (alerts.data?.alerts ?? []).filter((a) => a.type !== "pending_growth");
   const show = useDrill((s) => s.show);
   const patch = useFilterStore((s) => s.patch);
   const m = ov.data?.metrics;
@@ -57,11 +57,7 @@ export default function OverallPage() {
         items={KPIS.map((k) => ({ key: k.key, label: k.label, tone: k.tone, hint: k.hint, color: k.color, value: m?.[k.key],
           onClick: m ? () => show({ metric: k.key, title: k.label }) : undefined }))} />
 
-      <section aria-label="Completion" className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <RingStat label="Editing workload cleared" pct={m?.editing_pct}
-          detail={m ? `${fmtInt(m.processed)} handled · ${fmtInt(m.pending_editing)} pending` : undefined} />
-        <RingStat label="Edited share of received" pct={m?.edited_rate_pct} tone="warn"
-          detail={m ? `${fmtInt(m.edited)} edited of ${fmtInt(m.received)} received` : undefined} />
+      <section aria-label="Completion" className="mt-3 grid gap-3 sm:grid-cols-2">
         <RingStat label="QC workload cleared" pct={m?.qc_pct} tone="good"
           detail={m ? `${fmtInt(m.qc_completed)} done · ${fmtInt(m.qc_pending)} pending` : undefined} />
         <RingStat label="Received forms processed" pct={m?.completion_pct} tone="good"
@@ -84,15 +80,15 @@ export default function OverallPage() {
 
         <ChartCard title="By client" subtitle="Click a bar to drill into that client">
           {clients.isLoading ? <ChartSkeleton /> : (
-            <RankBars rows={(clients.data?.rows ?? []).map((r) => ({ id: r.id, name: r.name, values: { received: r.received, edited: r.edited, qc_completed: r.qc_completed } }))}
-              keys={["received", "edited", "qc_completed"]} onClick={(r) => r.id && patch({ client_id: r.id, project_id: undefined })} />
+            <RankBars rows={(clients.data?.rows ?? []).map((r) => ({ id: r.id, name: r.name, values: { received: r.received, qc_completed: r.qc_completed } }))}
+              keys={["received", "qc_completed"]} onClick={(r) => r.id && patch({ client_id: r.id, project_id: undefined })} />
           )}
         </ChartCard>
 
         <ChartCard title="Top projects by volume" subtitle="Click a bar to open the project">
           {projects.isLoading ? <ChartSkeleton /> : (
-            <RankBars rows={(projects.data?.rows ?? []).map((r) => ({ id: r.id, name: r.name, values: { received: r.received, pending_editing: r.pending_editing } }))}
-              keys={["received", "pending_editing"]} limit={10} onClick={(r) => r.id && patch({ project_id: r.id })} />
+            <RankBars rows={(projects.data?.rows ?? []).map((r) => ({ id: r.id, name: r.name, values: { received: r.received } }))}
+              keys={["received"]} limit={10} onClick={(r) => r.id && patch({ project_id: r.id })} />
           )}
         </ChartCard>
 
@@ -101,11 +97,11 @@ export default function OverallPage() {
             <h2 className="flex items-center gap-2 text-sm font-semibold"><AlertTriangle className="h-4 w-4 text-warn" /> Needs attention</h2>
             <Link href="/time" className="text-xs text-primary hover:underline">All comparisons</Link>
           </div>
-          {alerts.isLoading ? <ChartSkeleton h={160} /> : (alerts.data?.alerts.length ?? 0) === 0 ? (
+          {alerts.isLoading ? <ChartSkeleton h={160} /> : shownAlerts.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">No alerts for the last complete month.</p>
           ) : (
             <ul className="space-y-2">
-              {alerts.data!.alerts.slice(0, 6).map((a, i) => (
+              {shownAlerts.slice(0, 6).map((a, i) => (
                 <li key={i} className="rounded-xl border bg-card/50 p-3 text-sm">
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-medium">{a.project}</span>

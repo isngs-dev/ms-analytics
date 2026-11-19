@@ -5,7 +5,7 @@ import { themeInitScript } from "@/components/theme";
 
 export const metadata: Metadata = {
   title: "MS Analytics",
-  description: "Mystery shopping operations: volumes, editing, QC and escalations",
+  description: "Mystery shopping operations: volumes, QC and escalations",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

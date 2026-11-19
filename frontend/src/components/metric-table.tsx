@@ -5,8 +5,6 @@ import type { BreakRow } from "@/lib/types";
 
 const COLS: { key: keyof BreakRow; label: string }[] = [
   { key: "received", label: "Received" },
-  { key: "edited", label: "Edited" },
-  { key: "pending_editing", label: "Pending" },
   { key: "finalised", label: "Finalised" },
   { key: "qc_completed", label: "QC done" },
   { key: "qc_pending", label: "QC pending" },

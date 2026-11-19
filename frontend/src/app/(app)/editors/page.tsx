@@ -26,23 +26,21 @@ export default function EditorsPage() {
 
   return (
     <>
-      <PageHeader title="Editor productivity" subtitle="Forms handled (any outcome), edited, finalised and still pending per editor">
+      <PageHeader title="Editor productivity" subtitle="Forms handled (any outcome) and finalised per editor">
         <Breadcrumbs />
       </PageHeader>
       {q.isError && <QueryError error={q.error} />}
 
       <KpiHero loading={q.isLoading} wide={wide} items={[
         { key: "processed", label: "Forms handled", tone: "brand", hint: "Any outcome in period", color: "#1f7a4d", value: t?.processed, onClick: () => show({ metric: "processed", title: "Forms handled" }) },
-        { key: "edited", label: "Edited", tone: "brand", hint: "Edited & Saved", color: "#2e7d4f", value: t?.edited, onClick: () => show({ metric: "edited", title: "Edited" }) },
-        { key: "pending", label: "Pending editing", tone: "warn", hint: "As of period end", color: "#c2410c", value: t?.pending_editing, onClick: () => show({ metric: "pending_editing", title: "Pending editing" }) },
         { key: "editors", label: "Active editors", tone: "good", hint: "With work in period", color: "#15665a", value: q.isLoading ? undefined : rows.length },
       ]} />
 
       <div className="mt-4 grid gap-4 xl:grid-cols-3">
         <ChartCard className="xl:col-span-2" title="Editor comparison" subtitle="Click a bar to focus on that editor">
           {q.isLoading ? <ChartSkeleton /> : (
-            <RankBars rows={rows.map((r) => ({ id: r.id, name: r.name, values: { processed: r.processed, edited: r.edited, pending_editing: r.pending_editing } }))}
-              keys={["processed", "edited", "pending_editing"]} limit={14} onClick={(r) => r.id && patch({ editor_id: r.id })} />
+            <RankBars rows={rows.map((r) => ({ id: r.id, name: r.name, values: { processed: r.processed } }))}
+              keys={["processed"]} limit={14} onClick={(r) => r.id && patch({ editor_id: r.id })} />
           )}
         </ChartCard>
         <ChartCard title="iSN team vs freelancers" subtitle="Share of forms handled">
@@ -57,9 +55,9 @@ export default function EditorsPage() {
           <h2 className="text-lg font-semibold"><span className="text-gradient">{detail.data?.editor.name ?? "Editor"}</span></h2>
           {detail.isError && <QueryError error={detail.error} />}
           <div className="grid gap-4 xl:grid-cols-3">
-            <ChartCard className="xl:col-span-2" title="Output over time" subtitle="Edited, finalised and received by date"
+            <ChartCard className="xl:col-span-2" title="Output over time" subtitle="Finalised by date"
               action={<Tabs label="Granularity" value={g} onChange={setG} items={[{ value: "day", label: "Daily" }, { value: "week", label: "Weekly" }, { value: "month", label: "Monthly" }]} />}>
-              {detail.isLoading ? <ChartSkeleton /> : <TrendChart points={detail.data!.output} granularity={g} keys={["edited", "finalised"]} bars />}
+              {detail.isLoading ? <ChartSkeleton /> : <TrendChart points={detail.data!.output} granularity={g} keys={["finalised"]} bars />}
             </ChartCard>
             <ChartCard title="Contribution by client">
               {detail.isLoading ? <ChartSkeleton /> : (

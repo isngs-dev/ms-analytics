@@ -25,6 +25,7 @@ WATCHED = ("forms", "rework", "escalations", "dim_client", "dim_project", "dim_p
 
 _lock = threading.Lock()
 _store: "OrderedDict[tuple, Any]" = OrderedDict()
+MAX_AGE = 300.0
 SYNC_TTL = 60.0  # while a sync is writing, an answer is trusted for this many seconds instead of being thrown away at every write
 _local = threading.local()
 _syncing = 0
@@ -80,7 +81,10 @@ def cached(name: str) -> Callable:
             with _lock:
                 if key in _store:
                     stored_at, value = _store[key]
-                    if not _syncing or time.monotonic() - stored_at < SYNC_TTL:
+                    age = time.monotonic() - stored_at
+                    # MAX_AGE: a script run from a shell (keep_years, a re-sync) writes from another process, which this
+                    # process cannot see, so no answer outlives a few minutes
+                    if age < MAX_AGE and (not _syncing or age < SYNC_TTL):
                         _store.move_to_end(key)
                         hits += 1
                         return value

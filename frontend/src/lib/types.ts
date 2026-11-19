@@ -147,6 +147,8 @@ export interface DriverProject {
 export interface DriverMonth {
   month: string; previous_month: string; partial: boolean; current: number; previous: number; delta: number;
   pct_change: number | null; direction: "up" | "down" | "flat";
+  /** the exact days behind `current` and `previous` (the month in progress is cut to the same number of days) */
+  current_range: [string, string]; previous_range: [string, string];
   decliners: DriverProject[]; decliner_count: number; gainers: DriverProject[]; gainer_count: number;
 }
 export interface MonthDriversResp { metric: string; definition: string; months: DriverMonth[] }
