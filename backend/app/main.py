@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -8,6 +9,10 @@ from . import scheduler
 from .api.routers import admin, analytics, auth, documents, escalations, health, people, records, sync
 from .config import settings
 from .db import get_engine
+
+# the sync reports its progress here (which workbook it is reading); a no-op when logging is already configured
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+logging.getLogger("httpx").setLevel(logging.WARNING)  # one line per Drive request drowned everything else
 
 
 @asynccontextmanager

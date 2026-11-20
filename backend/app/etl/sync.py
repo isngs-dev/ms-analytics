@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
+import time
 from datetime import datetime, timezone
 
 from sqlalchemy import delete, select, update
@@ -72,7 +74,12 @@ def _aliases_for(index: AliasIndex, kind: str, client: str, project: str | None)
     return {k[len(prefix):]: v for k, v in merged.items() if k.startswith(prefix)}
 
 
+logger = logging.getLogger("sync")
+COMMIT_EVERY = 25  # unchanged files: the progress counter is saved in batches (a commit per file made a no-change check slow)
+
+
 def run_sync(session: Session, source: SheetSource, trigger: str = "manual", force: bool = False) -> SyncLog:
+    started = time.monotonic()
     log = SyncLog(trigger=trigger, status="running")
     session.add(log)
     session.commit()
@@ -88,6 +95,8 @@ def run_sync(session: Session, source: SheetSource, trigger: str = "manual", for
         _retire_other_years(session, log, years)
     log.files_total = len(files)
     session.commit()
+    logger.info("sync #%s (%s%s) started: %d workbooks in Drive for years %s", log.id, trigger, ", forced" if force else "",
+                len(files), years or "all")
 
     for meta in files:
         log.files_scanned += 1
@@ -99,9 +108,12 @@ def run_sync(session: Session, source: SheetSource, trigger: str = "manual", for
             session.flush()
         unchanged = sf.drive_modified_time == meta.modified_time and sf.status == "active"
         if unchanged and not force:
-            session.commit()  # persists the scanned counter so progress is visible
+            if log.files_scanned % COMMIT_EVERY == 0:
+                session.commit()  # persists the scanned counter so progress is visible
             continue
+        session.commit()
         log.files_changed += 1
+        logger.info("sync #%s: reading %d/%d %s", log.id, log.files_scanned, log.files_total, meta.name)
         loader = Loader(session, log.id)
         try:
             _process_file(session, source, meta, sf, loader, rules, alias_index, force)
@@ -123,6 +135,7 @@ def run_sync(session: Session, source: SheetSource, trigger: str = "manual", for
             session.add(SyncIssue(sync_id=log.id, severity="error", type="sheet_error", file_id=sf.id,
                                   detail=f"{type(exc).__name__}: {exc}"[:2000]))
             session.commit()
+            logger.warning("sync #%s: %s failed: %s: %s", log.id, meta.name, type(exc).__name__, str(exc)[:200])
 
     removed = 0 if had_error else _mark_removed(session, log, {m.drive_file_id for m in files})
 
@@ -137,6 +150,8 @@ def run_sync(session: Session, source: SheetSource, trigger: str = "manual", for
     else:
         hb.value = value
     session.commit()
+    logger.info("sync #%s finished: %s, %d of %d workbooks read, %d rows, %.0fs", log.id, log.status, log.files_changed,
+                len(files), log.rows_upserted, time.monotonic() - started)
     if trigger == "schedule" and log.files_changed == 0 and removed == 0 and not had_error:
         # a scheduled check that found nothing new is not worth a history row (it would be 144 a day)
         session.delete(log)
