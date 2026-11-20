@@ -320,6 +320,8 @@ class Loader:
             project = self.resolve_project(client, parsed, r.values.get("form_name"))
             received = self.date(r, "received_date")
             edit_d = self.date(r, "edit_date")
+            if received and edit_d and edit_d < received:
+                edit_d = received  # a form cannot be handled before it came in: count it on its Input Date
             qc_d = self.date(r, "qc_date")
             edit_status = self.status("edit_status", r.values.get("edit_status"))
             qc_status = self.status("qc_status", r.values.get("qc_status"))
