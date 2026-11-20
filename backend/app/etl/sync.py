@@ -84,7 +84,7 @@ def run_sync(session: Session, source: SheetSource, trigger: str = "manual", for
     files = list(source.list_files())
     years = sync_years(session)
     if years:  # Admin chose which years to keep: other years leave the analytics and are never read again
-        files = [m for m in files if m.year is None or m.year in years]
+        files = [m for m in files if kept_year(m.year, years)]
         _retire_other_years(session, log, years)
     log.files_total = len(files)
     session.commit()
@@ -148,6 +148,12 @@ ONLY_KINDS: set[str] | None = None  # set by scripts/resync_kind.py
 SYNC_YEARS_KEY = "sync_years"
 
 
+def kept_year(year: int | None, years: list[int]) -> bool:
+    """A year is kept when it is listed OR newer than every listed year: when a 2027 folder appears in Drive its
+    workbooks are picked up by the automatic sync without anyone editing the setting."""
+    return year is None or not years or year in years or year > max(years)
+
+
 def sync_years(session: Session) -> list[int]:
     """Years kept in the analytics (AppSetting 'sync_years' = {"years": [2026]}); empty = every year."""
     row = session.get(AppSetting, SYNC_YEARS_KEY)
@@ -166,7 +172,7 @@ def set_sync_years(session: Session, years: list[int]) -> None:
 def _retire_other_years(session: Session, log: SyncLog, years: list[int]) -> int:
     """Soft-delete the rows of every workbook whose year is not kept (reversible: clear the setting + full re-sync)."""
     other = [f for f in session.scalars(select(SrcFile).where(SrcFile.status != "removed"))
-             if f.year is not None and f.year not in years]
+             if not kept_year(f.year, years)]
     _remove_files(session, log, other, f"its year is not in the kept years {sorted(years)}")
     return len(other)
 

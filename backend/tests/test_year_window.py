@@ -46,8 +46,8 @@ def test_an_explicit_year_is_not_changed(api, engine):
     assert (period["from"], period["to"]) == (date(2026, 1, 1).isoformat(), date(2026, 1, 31).isoformat())
 
 
-def test_people_and_clients_who_only_appear_on_rows_before_the_kept_year_are_not_offered(api, engine):
-    """An editor / client / project that only has last year's rows (in a kept workbook) must not fill the dropdowns."""
+def test_each_year_offers_only_its_own_clients_projects_and_people(api, engine):
+    """Pick 2025 and only 2025's names are offered, pick 2026 and only 2026's (nobody from the other year)."""
     from app.models import DimClient, DimPerson, DimProject, Form
     with Session(engine) as s:
         old_c = DimClient(name="OldClient")
@@ -62,16 +62,17 @@ def test_people_and_clients_who_only_appear_on_rows_before_the_kept_year_are_not
                    row_hash="old1"))
         s.commit()
     login(api)
-    before = api.get("/api/meta/filters").json()
-    assert "Gone Editor" in [e["name"] for e in before["editors"]]  # every year kept: offered
-    from app.services import cache
-    keep(engine, [2026])
-    cache.clear()
-    meta = api.get("/api/meta/filters").json()
-    assert "Gone Editor" not in [e["name"] for e in meta["editors"] + meta["qc_members"]]
-    assert "OldClient" not in [c["name"] for c in meta["clients"]]
-    assert "OldProject" not in [p["name"] for p in meta["projects"]]
-    assert "ACME" in [c["name"] for c in meta["clients"]]
+    names = lambda m, k: [x["name"] for x in m[k]]  # noqa: E731
+    y25 = api.get("/api/meta/filters", params={"year": 2025}).json()
+    assert "Gone Editor" in names(y25, "editors") + names(y25, "qc_members")
+    assert "OldClient" in names(y25, "clients") and "OldProject" in names(y25, "projects")
+    assert "Ann" not in names(y25, "editors")  # Ann only works in 2026
+    y26 = api.get("/api/meta/filters", params={"year": 2026}).json()
+    assert "Gone Editor" not in names(y26, "editors") + names(y26, "qc_members")
+    assert "OldClient" not in names(y26, "clients") and "OldProject" not in names(y26, "projects")
+    assert "ACME" in names(y26, "clients") and "Ann" in names(y26, "editors")
+    allyears = api.get("/api/meta/filters", params={"range": "all"}).json()
+    assert "OldClient" in names(allyears, "clients") and "ACME" in names(allyears, "clients")
 
 
 def test_with_no_period_the_whole_current_year_is_shown(api):
@@ -79,3 +80,9 @@ def test_with_no_period_the_whole_current_year_is_shown(api):
     year = date.today().year
     p = api.get("/api/analytics/overview").json()["period"]
     assert (p["from"], p["to"]) == (f"{year}-01-01", f"{year}-12-31")
+
+
+def test_a_new_year_in_drive_is_kept_automatically():
+    from app.etl.sync import kept_year
+    assert kept_year(2027, [2025, 2026]) and kept_year(2026, [2025, 2026]) and kept_year(None, [2026])
+    assert not kept_year(2024, [2025, 2026]) and kept_year(2024, [])

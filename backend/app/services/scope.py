@@ -87,6 +87,22 @@ def data_span(db: Session, today: date | None = None) -> tuple[date, date]:
     return (lo or today - timedelta(days=364)), max(hi or today, today)
 
 
+def period_params(
+    period: str | None = Query(None, alias="range", pattern="^all$"),
+    year: int | None = Query(None, ge=2000, le=2100),
+    quarter: int | None = Query(None, ge=1, le=4),
+    month: int | None = Query(None, ge=1, le=12),
+    week: int | None = Query(None, ge=1, le=53),
+    date_from: date | None = None,
+    date_to: date | None = None,
+    db: Session = Depends(get_db),
+) -> tuple[date, date]:
+    """Just the period of the filters (no client / project / people), for lists that must match the selected year."""
+    if period == "all" and not (year or date_from or date_to):
+        return data_span(db)
+    return resolve_period(year, quarter, month, week, date_from, date_to)
+
+
 def scope_params(
     period: str | None = Query(None, alias="range", pattern="^all$",
                                description="'all' = every year in the data (ignored when a period or dates are given)"),

@@ -23,7 +23,13 @@ export function useFiltered<R>(key: string, path: string, extra?: Record<string,
 }
 
 export const useMe = () => useQuery({ queryKey: ["me"], queryFn: () => api<T.Me>("/auth/me"), staleTime: 300_000, retry: false });
-export const useMeta = () => useQuery({ queryKey: ["meta"], queryFn: () => api<T.MetaResp>("/meta/filters"), staleTime: 120_000 });
+/** Filter lists (clients, projects, editors...) for the selected period only: 2025 offers 2025's names, 2026 offers 2026's. */
+export function useMeta() {
+  const f = useApiFilters();
+  const period: Record<string, string | number> = {};
+  for (const k of ["range", "year", "quarter", "month", "week", "date_from", "date_to"]) if (f[k] !== undefined) period[k] = f[k];
+  return useQuery({ queryKey: ["meta", period], queryFn: () => api<T.MetaResp>("/meta/filters", period), staleTime: 120_000, placeholderData: keepPreviousData });
+}
 
 export const useOverview = () => useFiltered<T.OverviewResp>("overview", "/analytics/overview");
 export const useBreakdown = (by: string) => useFiltered<T.BreakdownResp>("breakdown", "/analytics/breakdown", { by });

@@ -25,6 +25,13 @@ The sync reads Drive with an OAuth token created by `scripts/drive_login.py` (re
 2. Filename `oauth-token.json`, contents = the file `secrets/oauth-token.json` from your computer.
 3. Save. The path `/etc/secrets/oauth-token.json` is already set in `GOOGLE_OAUTH_TOKEN_FILE`.
 
+**The token must not expire.** If the Google Cloud OAuth consent screen is in *Testing*, Google revokes the refresh token
+after 7 days and every sync then fails with `invalid_grant: Token has been expired or revoked` (Data Health shows it,
+the automatic sync stops picking up new Drive data). Fix it once, permanently: Google Cloud Console > APIs & Services >
+OAuth consent screen > **Publish app** (status "In production"; it stays an unverified read-only app for your own account,
+which is fine). Then run `scripts/drive_login.py` again and replace the Secret File on Render with the new
+`secrets/oauth-token.json`.
+
 A service account JSON works too: add it as a secret file `service-account.json`, set
 `GOOGLE_SERVICE_ACCOUNT_FILE=/etc/secrets/service-account.json`, and share the Drive folder with its `client_email`.
 Never commit either file. If the token ever leaks, revoke it at https://myaccount.google.com/permissions.

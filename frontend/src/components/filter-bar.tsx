@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Filter, RotateCcw, X } from "lucide-react";
 import { Button, Input, Select } from "./ui/primitives";
 import { useMeta } from "@/lib/hooks";
@@ -19,7 +19,7 @@ const Label = ({ children }: { children: React.ReactNode }) => (
  * Everything else (client, project, editor, statuses) narrows the data inside that period, on every page.
  */
 export function FilterBar() {
-  const { data: meta } = useMeta();
+  const { data: meta, isPlaceholderData } = useMeta();
   const f = useFilterStore((s) => s.filters);
   const patch = useFilterStore((s) => s.patch);
   const reset = useFilterStore((s) => s.reset);
@@ -38,6 +38,16 @@ export function FilterBar() {
     () => (f.year ? weeksInPeriod(f.year, f.quarter, f.month).map((w) => ({ value: w.week, label: w.label })) : []),
     [f.year, f.quarter, f.month],
   );
+
+  // a client / project / editor that is not in the newly chosen period's sheets cannot stay selected
+  useEffect(() => {
+    if (!meta || isPlaceholderData) return;
+    const drop: Partial<Filters> = {};
+    if (f.client_id && !meta.clients.some((c) => c.id === f.client_id)) drop.client_id = undefined;
+    if (f.project_id && !meta.projects.some((p) => p.id === f.project_id)) drop.project_id = undefined;
+    if (f.editor_id && !meta.editors.some((e) => e.id === f.editor_id) && !meta.qc_members.some((e) => e.id === f.editor_id)) drop.editor_id = undefined;
+    if (Object.keys(drop).length) patch(drop);
+  }, [meta, isPlaceholderData, f.client_id, f.project_id, f.editor_id, patch]);
 
   const projects = (meta?.projects ?? []).filter((p) => !f.client_id || p.client_id === f.client_id);
   const active = Object.keys(f).length;

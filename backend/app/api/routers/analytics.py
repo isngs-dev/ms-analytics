@@ -13,7 +13,7 @@ from ...services.cache import cached
 from ...services import metrics
 from ...services import quality as quality_svc
 from ...services import trends
-from ...services.scope import Scope, scope_params, window_start
+from ...services.scope import Scope, period_params, scope_params, window_start
 from ..deps import viewer
 
 router = APIRouter(tags=["analytics"], dependencies=[viewer])
@@ -32,13 +32,11 @@ def _data_range(db: Session, live) -> dict:
 
 
 @cached("filter_values")
-def _filter_values(db: Session) -> dict:
+def _filter_values(db: Session, a: date, b: date) -> dict:
     live = Form.deleted_at.is_(None)  # clients / projects / people / statuses that only exist in removed years stay out
-    start = window_start(db)
-    if start is not None:
-        # a kept workbook can carry rows dated before the first kept year (a 2026 sheet with last year's Input Date):
-        # a client / project / editor / QC member who only appears on such rows is not part of the kept years
-        live = and_(live, or_(Form.received_date >= start, Form.edit_date >= start, Form.qc_date >= start))
+    # only what the selected period actually contains: pick 2025 and 2025's clients / projects / editors / QC members are
+    # offered, pick 2026 and only 2026's. Nobody who is absent from the period's sheets shows up.
+    live = and_(live, or_(Form.received_date.between(a, b), Form.edit_date.between(a, b), Form.qc_date.between(a, b)))
     people = db.execute(select(DimPerson.id, DimPerson.name).order_by(DimPerson.name)).all()
     editors = set(db.scalars(select(Form.editor_id).where(Form.editor_id.is_not(None), live).distinct()))
     qcs = set(db.scalars(select(Form.qc_member_id).where(Form.qc_member_id.is_not(None), live).distinct()))
@@ -57,13 +55,13 @@ def _filter_values(db: Session) -> dict:
         "edit_statuses": sorted(s for s in db.scalars(select(Form.edit_status).where(live).distinct()) if s),
         "qc_statuses": sorted(s for s in db.scalars(select(Form.qc_status).where(live).distinct()) if s),
         "editor_types": sorted(s for s in db.scalars(select(Form.editor_type).where(live).distinct()) if s),
-        "data_range": _data_range(db, live),
+        "data_range": _data_range(db, Form.deleted_at.is_(None)),
     }
 
 
 @router.get("/meta/filters")
-def filter_options(db: Session = Depends(get_db)):
-    out = dict(_filter_values(db=db))  # heavy part cached; the sync stamp is always fresh
+def filter_options(period: tuple[date, date] = Depends(period_params), db: Session = Depends(get_db)):
+    out = dict(_filter_values(db=db, a=period[0], b=period[1]))  # heavy part cached; the sync stamp is always fresh
     last = db.scalar(select(SyncLog).where(SyncLog.status.in_(["ok", "partial"])).order_by(SyncLog.id.desc()).limit(1))
     out["last_sync"] = {"id": last.id, "finished_at": last.finished_at, "status": last.status} if last else None
     return out
