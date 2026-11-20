@@ -8,20 +8,16 @@ from ...config import settings
 from ...db import get_db
 from ...models import AppSetting, SyncLog
 from ...services import sync_runner
-from ...security import ROLES
-from ..deps import current_user, viewer
+from ..deps import manager, viewer
 from .health import _log
 
 router = APIRouter(prefix="/sync", tags=["sync"])
 
 
-@router.post("", status_code=202)
+@router.post("", status_code=202, dependencies=[manager])
 def sync_now(background: BackgroundTasks, force: bool = Query(False, description="re-read unchanged files"),
-             db: Session = Depends(get_db), user=Depends(current_user)):
-    """Manual 'Sync now'. Runs in the background; poll GET /sync/status for progress.
-    Anyone signed in may start the normal check (it only reads Drive for what changed); the full re-read needs a manager."""
-    if force and ROLES.get(user.role, 0) < ROLES["manager"]:
-        raise HTTPException(403, "manager role required for a full re-sync")
+             db: Session = Depends(get_db)):
+    """Manual 'Sync now'. Runs in the background; poll GET /sync/status for progress."""
     if settings.data_source != "mock":
         try:
             sync_runner.get_source()  # validates credentials / config without touching the network

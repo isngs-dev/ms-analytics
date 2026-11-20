@@ -251,8 +251,8 @@ def get_settings(db: Session = Depends(get_db)):
 def put_setting(key: str, value: dict[str, Any], db: Session = Depends(get_db)):
     if key == "refresh_schedule":
         mins = value.get("interval_minutes")
-        if not isinstance(mins, int) or not 1 <= mins <= 1440:
-            raise HTTPException(422, "interval_minutes must be an integer between 1 and 1440")
+        if not isinstance(mins, int) or not 5 <= mins <= 1440:
+            raise HTTPException(422, "interval_minutes must be an integer between 5 and 1440")
     elif key not in ("level_labels",):
         raise HTTPException(404, "unknown setting")
     s = db.get(AppSetting, key)

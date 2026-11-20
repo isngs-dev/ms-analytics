@@ -34,7 +34,6 @@ SHORTCUT_MIME = "application/vnd.google-apps.shortcut"
 SCOPES = ["https://www.googleapis.com/auth/drive.readonly", "https://www.googleapis.com/auth/spreadsheets.readonly"]
 MAX_DEPTH = 4  # root > year > quarter > (optional extra level)
 BATCH_TABS = 6  # tabs per Sheets batchGet call
-HTTP_TIMEOUT_SECONDS = 120  # per network operation of a Google call
 
 
 class DriveConfigError(RuntimeError):
@@ -87,18 +86,7 @@ class DriveSource:
     # ------------------------------------------------------------------ construction
     @classmethod
     def from_settings(cls, s) -> "DriveSource":
-        import httplib2
-        from googleapiclient.discovery import build as _build
-
-        def build(name, version, credentials=None, developerKey=None, cache_discovery=False):
-            """Every Google call has a time limit: one request that hangs must not freeze the sync (it holds the run lock,
-            so every later automatic sync would silently do nothing)."""
-            http = httplib2.Http(timeout=HTTP_TIMEOUT_SECONDS)
-            if credentials is not None:
-                import google_auth_httplib2
-                http = google_auth_httplib2.AuthorizedHttp(credentials, http=http)
-                return _build(name, version, http=http, cache_discovery=False)
-            return _build(name, version, http=http, developerKey=developerKey, cache_discovery=False)
+        from googleapiclient.discovery import build
 
         key_file = Path(s.google_service_account_file)
         if key_file.is_file():

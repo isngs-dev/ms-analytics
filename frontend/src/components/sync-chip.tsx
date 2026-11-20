@@ -17,11 +17,11 @@ function ago(iso?: string | null, now = Date.now()) {
 
 /**
  * Keeps the whole dashboard live: polls the sync state, and whenever a sync finishes with new data from
- * Drive (or every 20 seconds while one is running) every number on every page is refetched.
+ * Drive (or every minute while one is running) every number on every page is refetched.
  */
 export function SyncChip() {
   const qc = useQueryClient();
-  const q = useQuery({ queryKey: ["sync-status"], queryFn: () => api<SyncStatus>("/sync/status"), refetchInterval: 10_000 });
+  const q = useQuery({ queryKey: ["sync-status"], queryFn: () => api<SyncStatus>("/sync/status"), refetchInterval: 20_000 });
   const [now, setNow] = useState(() => Date.now());
   const [toast, setToast] = useState(false);
   const seen = useRef<string | null>(null);
@@ -44,7 +44,7 @@ export function SyncChip() {
 
   useEffect(() => {
     if (!d?.running) return;
-    const t = setInterval(() => qc.invalidateQueries({ predicate: (qq) => qq.queryKey[0] !== "sync-status" }), 20_000);
+    const t = setInterval(() => qc.invalidateQueries({ predicate: (qq) => qq.queryKey[0] !== "sync-status" }), 60_000);
     return () => clearInterval(t);
   }, [d?.running, qc]);
 
