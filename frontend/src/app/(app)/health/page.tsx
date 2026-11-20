@@ -40,7 +40,8 @@ export default function HealthPage() {
     placeholderData: keepPreviousData,
   });
 
-  const canSync = me?.role === "manager" || me?.role === "admin";
+  const canSync = !!me;  // anyone signed in can ask for a Drive check; the full re-read is for managers
+  const canFull = me?.role === "manager" || me?.role === "admin";
   const h = health.data;
   const last = sync.data?.last;
   const running = sync.data?.running;
@@ -65,12 +66,16 @@ export default function HealthPage() {
               </div>
             )}
             {!running && last && <p className="mt-1 text-xs text-muted-foreground">{last.files_changed} of {last.files_total ?? last.files_scanned} files changed · {fmtInt(last.rows_upserted)} rows · {fmtInt(last.rows_rejected)} rejected</p>}
-            {last?.error_text && <p role="alert" className="mt-1 text-sm text-bad">{last.error_text}</p>}
+            {sync.data && <p className="mt-1 text-xs text-muted-foreground">
+              {sync.data.auto_sync.enabled ? `Drive is checked automatically every ${sync.data.auto_sync.interval_minutes ?? "?"} min` : "Automatic checking is off (SCHEDULER_ENABLED)"}
+              {sync.data.heartbeat?.checked_at && <> · last check {new Date(sync.data.heartbeat.checked_at).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", second: "2-digit" })}</>}
+            </p>}
+            {last?.error_text &&<p role="alert" className="mt-1 text-sm text-bad">{last.error_text}</p>}
           </div>
           {canSync && (
             <div className="flex gap-2">
               <Button variant="brand" disabled={running || run.isPending} onClick={() => run.mutate(false)}><RefreshCw className={`h-4 w-4 ${running ? "animate-spin" : ""}`} /> Sync now</Button>
-              <Button disabled={running || run.isPending} onClick={() => run.mutate(true)} title="Re-read every file, even unchanged ones">Full re-sync</Button>
+              {canFull && <Button disabled={running || run.isPending} onClick={() => run.mutate(true)} title="Re-read every file, even unchanged ones">Full re-sync</Button>}
             </div>
           )}
         </div>

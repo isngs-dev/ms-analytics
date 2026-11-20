@@ -86,7 +86,7 @@ def test_requires_login_and_roles(api):
     login(api, "v")
     assert api.get("/api/auth/me").json()["role"] == "viewer"
     assert api.get("/api/analytics/overview", params=JAN).status_code == 200
-    assert api.post("/api/sync").status_code == 403
+    assert api.post("/api/sync", params={"force": "true"}).status_code == 403  # a full re-read stays with managers
     assert api.get("/api/records/forms/export", params=JAN).status_code == 403
     assert api.get("/api/admin/users").status_code == 403
 
@@ -379,6 +379,13 @@ def test_data_health_and_meta(api):
     assert meta["data_range"]["from"] == "2025-12-28"
 
 
+def test_a_viewer_can_press_sync_now(api, monkeypatch):
+    monkeypatch.setattr(sync_runner, "get_source", lambda: InMemorySource([alpha()]))
+    login(api, "v")
+    assert api.post("/api/sync").status_code == 202
+    assert api.get("/api/sync/status").json()["last"]["status"] == "ok"
+
+
 def test_sync_now_runs_and_reports(api, monkeypatch):
     monkeypatch.setattr(sync_runner, "get_source", lambda: InMemorySource([alpha()]))
     login(api, "m")
@@ -454,8 +461,8 @@ def test_admin_users_and_guards(api, data):
     api.patch(f"/api/admin/projects/{data['p2'].id}", json={"qc_applicable_override": True})
     m = api.get("/api/analytics/overview", params=JAN).json()["metrics"]
     assert m["qc_pending"] == 2  # f7 now counts
-    r = api.put("/api/admin/settings/refresh_schedule", json={"interval_minutes": 1})
-    assert r.status_code == 422
+    assert api.put("/api/admin/settings/refresh_schedule", json={"interval_minutes": 0}).status_code == 422
+    assert api.put("/api/admin/settings/refresh_schedule", json={"interval_minutes": 1}).status_code == 200
     r = api.post("/api/admin/sheet-rules", json={"priority": 5, "pattern": "([", "kind": "ignored"})
     assert r.status_code == 422
 
