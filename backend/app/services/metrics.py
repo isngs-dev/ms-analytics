@@ -5,10 +5,10 @@
   finalised        every form handled: Transaction Date in period, whatever its Ops Status (same count as processed)
   processed        Transaction Date in period (any outcome, incl. hold / incomplete)
   qc_completed     QC Date in period
-  pending_editing  AS OF period end: received on/before end, not processed by end
-  qc_pending       AS OF period end: edited by end, QC-applicable project, no QC by end
+  pending_editing  received IN the period, not processed by the period end
+  qc_pending       edited IN the period, QC-applicable project, no QC by the period end
 
-Because pending_* are evaluated "as of" a date, historical periods report what was pending then.
+Only forms of the selected dates are counted: no backlog from earlier months leaks into a period.
 The same predicates drive the drill-through (records) endpoints, so a count and its rows always agree.
 """
 from __future__ import annotations
@@ -32,8 +32,8 @@ DEFINITIONS = {
     "finalised": "forms handled in the period: Transaction Date in the period, whatever the Ops Status (Hold, Incomplete, Accepted ... all count)",
     "processed": "forms with a Transaction Date in the period, any outcome",
     "qc_completed": "forms whose QC Date falls in the period",
-    "pending_editing": "as of period end: received on or before the end and not processed by then",
-    "qc_pending": "as of period end: edited, in a QC-applicable project, with no QC by then",
+    "pending_editing": "received in the period and not processed by the period end",
+    "qc_pending": "edited in the period, in a QC-applicable project, with no QC by the period end",
     # all three are bounded 0-100%, recomputed for whatever period / filters are selected
     "received_handled": "of the forms received in the period, those already handled (Transaction Date) by the period end",
     "received_pending": "of the forms received in the period, those still not handled at the period end (received_handled + received_pending = received)",
@@ -88,8 +88,12 @@ def predicates(scope: Scope, sets: StatusSets) -> dict[str, Any]:
         "finalised": processed,  # a handled form is finalised: no status is left out, so it lines up with Received
         "processed": processed,
         "qc_completed": and_(Form.qc_date >= a, Form.qc_date <= b),
-        "pending_editing": and_(Form.received_date <= b, or_(Form.edit_date.is_(None), Form.edit_date > b)),
-        "qc_pending": and_(QC_APPLICABLE.is_(True), edited_ok, Form.edit_date <= b,
+        # Both "still waiting" numbers belong to the selected dates only (no backlog from earlier months, so the rows
+        # behind them and the clients / editors listed are those of the period): received in the period and not handled
+        # by its end / handled in the period, in a QC project, and not quality-checked by its end.
+        "pending_editing": and_(Form.received_date >= a, Form.received_date <= b,
+                                or_(Form.edit_date.is_(None), Form.edit_date > b)),
+        "qc_pending": and_(QC_APPLICABLE.is_(True), edited_ok, Form.edit_date >= a, Form.edit_date <= b,
                            or_(Form.qc_date.is_(None), Form.qc_date > b)),
         # cohort: received in the period AND processed by period end
         "cohort_done": and_(Form.received_date >= a, Form.received_date <= b, Form.edit_date.is_not(None),

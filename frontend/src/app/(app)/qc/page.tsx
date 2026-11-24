@@ -23,7 +23,7 @@ export default function QcPage() {
 
       <KpiHero loading={qc.isLoading} wide={wide} items={[
         { key: "qcd", label: "QC completed", tone: "good", hint: "QC Date in period", color: "#15665a", value: qc.data?.totals.qc_completed, onClick: () => show({ metric: "qc_completed", title: "QC completed" }) },
-        { key: "qcp", label: "QC pending", tone: "warn", hint: "As of period end", color: "#b91c1c", value: qc.data?.totals.qc_pending, onClick: () => show({ metric: "qc_pending", title: "QC pending" }) },
+        { key: "qcp", label: "QC pending", tone: "warn", hint: "Handled in period, no QC yet", color: "#b91c1c", value: qc.data?.totals.qc_pending, onClick: () => show({ metric: "qc_pending", title: "QC pending" }) },
         { key: "pct", label: "QC workload cleared %", tone: "brand", hint: "done ÷ (done + pending)", color: "#1f7a4d", value: qc.data?.totals.qc_pct == null ? undefined : Math.round(qc.data.totals.qc_pct) },
       ]} />
 

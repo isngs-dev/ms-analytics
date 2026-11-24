@@ -268,7 +268,7 @@ function Settings() {
     <div className="grid gap-4 lg:grid-cols-2">
       <Card>
         <h2 className="mb-1 text-sm font-semibold">Refresh schedule</h2>
-        <p className="mb-3 text-xs text-muted-foreground">How often the scheduled sync runs (5 to 1440 minutes). Needs SCHEDULER_ENABLED on the server.</p>
+        <p className="mb-3 text-xs text-muted-foreground">How often the scheduled sync runs (1 to 1440 minutes). Needs SCHEDULER_ENABLED on the server.</p>
         <div className="flex items-end gap-2">
           <label className="flex flex-col gap-1 text-sm">Every (minutes)<Input type="number" className="h-9 w-32" value={shownMins} onChange={(e) => setMins(e.target.value)} /></label>
           <Button variant="brand" size="sm" onClick={() => saveSched.mutate()} disabled={saveSched.isPending}>Save</Button>

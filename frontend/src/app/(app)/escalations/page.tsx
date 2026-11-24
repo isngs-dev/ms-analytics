@@ -51,6 +51,13 @@ export default function EscalationsPage() {
         { key: "closed", label: "Closed", tone: "good", hint: "Action closed", color: "#1f7a4d", value: s?.closed },
       ]} />
 
+      {s && s.total === 0 && (
+        <p role="status" className="mt-4 rounded-xl border bg-card/50 p-4 text-sm text-muted-foreground">
+          No escalations were raised between {fmtDate(s.period.from)} and {fmtDate(s.period.to)} for the selected filters.
+          Only escalations whose date falls in this range are shown; widen the dates or clear a filter to see more.
+        </p>
+      )}
+
       <div className="mt-4 grid gap-4 xl:grid-cols-2">
         <ChartCard title="By client" subtitle="Click a bar to filter">
           {sum.isLoading ? <ChartSkeleton h={200} /> : <RankBars rows={bars(s?.by_client)} keys={["count"]} onClick={(r) => r.id && patchF({ client_id: r.id })} />}

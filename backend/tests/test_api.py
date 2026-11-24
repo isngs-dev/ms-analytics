@@ -80,13 +80,15 @@ JAN = {"year": 2026, "month": 1}
 
 
 # ------------------------------------------------------------------------------ auth
-def test_requires_login_and_roles(api):
+def test_requires_login_and_roles(api, monkeypatch):
+    monkeypatch.setattr(sync_runner, "get_source", lambda: InMemorySource([alpha()]))  # never reach the real Drive
     assert api.get("/api/analytics/overview", params=JAN).status_code == 401
     assert api.post("/api/auth/login", json={"email": "v@x.test", "password": "wrong"}).status_code == 401
     login(api, "v")
     assert api.get("/api/auth/me").json()["role"] == "viewer"
     assert api.get("/api/analytics/overview", params=JAN).status_code == 200
-    assert api.post("/api/sync").status_code == 403
+    assert api.post("/api/sync", params={"force": "true"}).status_code == 403  # a full re-sync stays with managers
+    assert api.post("/api/sync").status_code != 403  # a plain "Sync now" is open to every signed-in user
     assert api.get("/api/records/forms/export", params=JAN).status_code == 403
     assert api.get("/api/admin/users").status_code == 403
 
@@ -135,12 +137,19 @@ def test_percentages_follow_the_filters_and_never_exceed_100(api, data):
     assert len(seen) >= 3  # the rings actually move when the filters change
 
 
-def test_history_reports_what_was_pending_then(api):
+def test_pending_belongs_to_the_selected_period_only(api):
     login(api)
+    # January: f3 (received 20 Jan) was never edited and f5 (received 25 Jan) was only edited on 2 Feb;
+    # f2 (edited 12 Jan, QC project) never got QC
+    jan = api.get("/api/analytics/overview", params=JAN).json()["metrics"]
+    assert jan["pending_editing"] == 2 and jan["qc_pending"] == 1
+    # February received nothing and f5 was edited and QC'd in February: January's backlog must not leak in
     feb = api.get("/api/analytics/overview", params={"year": 2026, "month": 2}).json()["metrics"]
     assert feb["received"] == 0 and feb["edited"] == 1 and feb["qc_completed"] == 1
-    assert feb["pending_editing"] == 1  # f3 never edited
-    assert feb["qc_pending"] == 1  # f2 still has no QC
+    assert feb["pending_editing"] == 0 and feb["qc_pending"] == 0
+    for metric in ("pending_editing", "qc_pending"):
+        rows = api.get("/api/records/forms", params={"year": 2026, "month": 2, "metric": metric}).json()
+        assert rows["total"] == 0
 
 
 def test_dimension_filters(api, data):
@@ -454,8 +463,8 @@ def test_admin_users_and_guards(api, data):
     api.patch(f"/api/admin/projects/{data['p2'].id}", json={"qc_applicable_override": True})
     m = api.get("/api/analytics/overview", params=JAN).json()["metrics"]
     assert m["qc_pending"] == 2  # f7 now counts
-    r = api.put("/api/admin/settings/refresh_schedule", json={"interval_minutes": 1})
-    assert r.status_code == 422
+    assert api.put("/api/admin/settings/refresh_schedule", json={"interval_minutes": 0}).status_code == 422
+    assert api.put("/api/admin/settings/refresh_schedule", json={"interval_minutes": 1}).status_code == 200
     r = api.post("/api/admin/sheet-rules", json={"priority": 5, "pattern": "([", "kind": "ignored"})
     assert r.status_code == 422
 

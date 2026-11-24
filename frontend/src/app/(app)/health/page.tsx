@@ -65,14 +65,16 @@ export default function HealthPage() {
               </div>
             )}
             {!running && last && <p className="mt-1 text-xs text-muted-foreground">{last.files_changed} of {last.files_total ?? last.files_scanned} files changed · {fmtInt(last.rows_upserted)} rows · {fmtInt(last.rows_rejected)} rejected</p>}
+            {sync.data && <p className="mt-1 text-xs text-muted-foreground">
+              {sync.data.auto_sync.enabled ? `Drive is checked automatically every ${sync.data.auto_sync.interval_minutes ?? "?"} min` : "Automatic checking is off (SCHEDULER_ENABLED)"}
+              {sync.data.heartbeat?.checked_at && <> · last check {new Date(sync.data.heartbeat.checked_at).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", second: "2-digit" })}</>}
+            </p>}
             {last?.error_text && <p role="alert" className="mt-1 text-sm text-bad">{last.error_text}</p>}
           </div>
-          {canSync && (
-            <div className="flex gap-2">
-              <Button variant="brand" disabled={running || run.isPending} onClick={() => run.mutate(false)}><RefreshCw className={`h-4 w-4 ${running ? "animate-spin" : ""}`} /> Sync now</Button>
-              <Button disabled={running || run.isPending} onClick={() => run.mutate(true)} title="Re-read every file, even unchanged ones">Full re-sync</Button>
-            </div>
-          )}
+          <div className="flex gap-2">
+            <Button variant="brand" disabled={running || run.isPending} onClick={() => run.mutate(false)}><RefreshCw className={`h-4 w-4 ${running || run.isPending ? "animate-spin" : ""}`} /> Sync now</Button>
+            {canSync && <Button disabled={running || run.isPending} onClick={() => run.mutate(true)} title="Re-read every file, even unchanged ones">Full re-sync</Button>}
+          </div>
         </div>
         {run.isError && <div className="mt-3"><QueryError error={run.error} /></div>}
       </Card>

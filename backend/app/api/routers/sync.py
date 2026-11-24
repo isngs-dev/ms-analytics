@@ -6,18 +6,22 @@ from sqlalchemy.orm import Session
 
 from ...config import settings
 from ...db import get_db
-from ...models import AppSetting, SyncLog
+from ...models import AppSetting, AppUser, SyncLog
+from ...security import ROLES
 from ...services import sync_runner
-from ..deps import manager, viewer
+from ..deps import current_user, viewer
 from .health import _log
 
 router = APIRouter(prefix="/sync", tags=["sync"])
 
 
-@router.post("", status_code=202, dependencies=[manager])
+@router.post("", status_code=202)
 def sync_now(background: BackgroundTasks, force: bool = Query(False, description="re-read unchanged files"),
-             db: Session = Depends(get_db)):
-    """Manual 'Sync now'. Runs in the background; poll GET /sync/status for progress."""
+             db: Session = Depends(get_db), user: AppUser = Depends(current_user)):
+    """Manual 'Sync now': any signed-in user (it only reads changed files and one run at a time is enforced).
+    A forced full re-sync re-reads every file, so that stays with managers. Poll GET /sync/status for progress."""
+    if force and ROLES.get(user.role, 0) < ROLES["manager"]:
+        raise HTTPException(403, "manager role required for a full re-sync")
     if settings.data_source != "mock":
         try:
             sync_runner.get_source()  # validates credentials / config without touching the network
