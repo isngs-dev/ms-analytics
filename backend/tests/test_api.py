@@ -349,11 +349,24 @@ def test_people_endpoints(api, data):
     assert api.get("/api/people/editors/99999", params=JAN).status_code == 404
 
 
+def test_client_escalation_wording_is_grouped(api, engine, data):
+    with Session(engine) as s:
+        s.query(Escalation).update({"client_feedback": " DNA Alert "})
+        s.add_all([Escalation(client_id=data["client"].id, project_id=data["p1"].id, job_id=j, raised_date=D(2026, 1, 23),
+                              client_feedback=t, row_hash=f"w{j}") for j, t in (("w1", "dna alert"), ("w2", "Bad Editing"), ("w3", None))])
+        s.commit()
+    login(api)
+    sm = api.get("/api/escalations/summary", params=JAN).json()
+    assert [(g["name"], g["count"]) for g in sm["by_client_escalation"]] == [("DNA Alert", 2), ("Bad Editing", 1)]
+    assert sm["with_client_escalation"] == 3 and sm["total"] == 4
+
+
 def test_escalations_summary_and_tracking(api):
     login(api, "m")
     sm = api.get("/api/escalations/summary", params=JAN).json()
     assert sm["total"] == 1 and sm["open"] == 1
     assert sm["by_root_cause"][0]["name"] == "missed instruction"  # normalised
+    assert sm["by_client_escalation"] == [] and sm["with_client_escalation"] == 0  # the fixture has no client note
     row = api.get("/api/escalations", params=JAN).json()["rows"][0]
     r = api.patch(f"/api/escalations/{row['id']}", json={"action_status": "closed",
                                                          "corrective_action": "Retrained"})

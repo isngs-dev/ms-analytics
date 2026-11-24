@@ -39,6 +39,11 @@ def summary(scope: Scope = Depends(scope_params), db: Session = Depends(get_db))
     total = db.scalar(select(func.count()).select_from(Escalation).where(*where)) or 0
     closed = db.scalar(select(func.count()).select_from(Escalation).where(
         *where, Escalation.action_status == "closed")) or 0
+    # the client's own words (Client Escalation / Feedback cell): the same wording counts together, most frequent first
+    said = func.nullif(func.lower(func.btrim(Escalation.client_feedback)), "")
+    by_said = [{"id": None, "name": r.name, "count": int(r.n)} for r in db.execute(
+        select(func.min(func.btrim(Escalation.client_feedback)).label("name"), func.count().label("n"))
+        .where(*where, said.is_not(None)).group_by(said).order_by(func.count().desc(), said).limit(15))]
     month = func.to_char(func.date_trunc("month", Escalation.raised_date), "YYYY-MM")
     return {
         "period": {"from": scope.date_from.isoformat(), "to": scope.date_to.isoformat()},
@@ -50,6 +55,9 @@ def summary(scope: Scope = Depends(scope_params), db: Session = Depends(get_db))
         "by_editor": _group(db, where, Escalation.editor_id, func.coalesce(Ed.name, "(unassigned)"),
                             [(Ed, Ed.id == Escalation.editor_id, True)]),
         "by_root_cause": _group(db, where, root, root),
+        "by_client_escalation": by_said,
+        "with_client_escalation": int(db.scalar(select(func.count()).select_from(Escalation).where(
+            *where, said.is_not(None))) or 0),
         "by_error_category": _group(db, where, Escalation.error_category_id,
                                     func.coalesce(DimErrorCategory.name, "(uncategorised)"),
                                     [(DimErrorCategory, DimErrorCategory.id == Escalation.error_category_id, True)]),

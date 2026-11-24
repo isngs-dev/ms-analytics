@@ -72,6 +72,7 @@ export interface EscSummary {
   period: Period;
   total: number; closed: number; open: number;
   by_client: Group[]; by_project: Group[]; by_editor: Group[]; by_root_cause: Group[];
+  by_client_escalation: Group[]; with_client_escalation: number;
   by_error_category: Group[]; by_action_status: Group[]; by_month: Group[];
 }
 export interface EscRow {

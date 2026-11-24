@@ -79,6 +79,14 @@ export default function EscalationsPage() {
         </ChartCard>
       </div>
 
+      <ChartCard className="mt-4" title="Client escalations"
+        subtitle={s ? `What the client said, most repeated first · ${s.with_client_escalation} of ${s.total} escalations carry a client escalation note` : "What the client said, most repeated first"}>
+        {sum.isLoading ? <ChartSkeleton h={240} /> : (s?.by_client_escalation.length ?? 0) === 0
+          ? <p className="py-10 text-center text-sm text-muted-foreground">No client escalation notes for these filters.</p>
+          : <RankBars rows={bars((s?.by_client_escalation ?? []).map((x) => ({ ...x, name: x.name.length > 90 ? `${x.name.slice(0, 88)}…` : x.name })))}
+              keys={["count"]} limit={15} />}
+      </ChartCard>
+
       <ChartCard className="mt-4" title="Escalation log"
         action={
           <div className="flex flex-wrap items-end gap-2">
