@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from ..models import (AppSetting, ColumnMap, Escalation, Form, Rework, SheetRule, SrcFile, SrcRecord, SrcSheet,
                       SyncIssue, SyncLog)
+from ..services.form_escalations import sync_form_escalations
 from .discover import TabRule, classify_tab, is_credential_tab, month_from_tab, parse_workbook_name
 from .loader import Loader
 from .parse_sheet import AliasIndex, detect_table, parse_sheet
@@ -138,6 +139,15 @@ def run_sync(session: Session, source: SheetSource, trigger: str = "manual", for
             logger.warning("sync #%s: %s failed: %s: %s", log.id, meta.name, type(exc).__name__, str(exc)[:200])
 
     removed = 0 if had_error else _mark_removed(session, log, {m.drive_file_id for m in files})
+
+    try:  # the 'Client Escalation' column of the form rows counts as escalations too (see the service)
+        derived = sync_form_escalations(session)
+        if derived["written"] or derived["removed"]:
+            logger.info("sync #%s: form-row escalations: %d written, %d removed", log.id, derived["written"],
+                        derived["removed"])
+    except Exception as exc:  # never fail a sync over it
+        session.rollback()
+        logger.warning("sync #%s: form-row escalations failed: %s: %s", log.id, type(exc).__name__, str(exc)[:200])
 
     log.finished_at = datetime.now(timezone.utc)
     log.status = "partial" if had_error else "ok"

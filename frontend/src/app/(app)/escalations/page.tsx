@@ -87,9 +87,9 @@ export default function EscalationsPage() {
           </div>
         }>
         <div className="overflow-auto rounded-xl border">
-          <table className="w-full min-w-[56rem] text-left text-sm">
+          <table className="w-full min-w-[72rem] text-left text-sm">
             <caption className="sr-only">Escalations</caption>
-            <thead className="bg-muted/80"><tr>{["Date", "Client / project", "Job", "Editor", "Root cause", "Action", "Status", ""].map((h) => <th key={h} scope="col" className="px-3 py-2 font-medium">{h}</th>)}</tr></thead>
+            <thead className="bg-muted/80"><tr>{["Date", "Client / project", "Job", "Editor", "Client escalation", "Error category", "Root cause", "Action", "Status", ""].map((h) => <th key={h} scope="col" className="px-3 py-2 font-medium">{h}</th>)}</tr></thead>
             <tbody>
               {(list.data?.rows ?? []).map((r) => (
                 <tr key={r.id} className="border-t align-top">
@@ -97,13 +97,15 @@ export default function EscalationsPage() {
                   <td className="px-3 py-2">{r.project}<span className="block text-xs text-muted-foreground">{r.client}</span></td>
                   <td className="px-3 py-2 tabular">{r.job_id ?? "–"}</td>
                   <td className="px-3 py-2">{r.editor ?? "–"}</td>
+                  <td className="max-w-xs px-3 py-2">{r.client_feedback ?? "–"}</td>
+                  <td className="px-3 py-2">{r.error_category ?? "–"}</td>
                   <td className="max-w-xs px-3 py-2">{r.root_cause ?? "–"}</td>
                   <td className="max-w-xs px-3 py-2 text-muted-foreground">{r.corrective_action || r.preventive_action || "–"}</td>
                   <td className="px-3 py-2"><Badge tone={tone(r.action_status)}>{r.action_status.replace("_", " ")}</Badge></td>
                   <td className="px-3 py-2">{canEdit && <Button size="icon" variant="ghost" aria-label={`Update action for escalation ${r.id}`} onClick={() => setEdit(r)}><Pencil className="h-4 w-4" /></Button>}</td>
                 </tr>
               ))}
-              {(list.data?.rows.length ?? 0) === 0 && <tr><td colSpan={8} className="px-3 py-10 text-center text-muted-foreground">No escalations for these filters.</td></tr>}
+              {(list.data?.rows.length ?? 0) === 0 && <tr><td colSpan={10} className="px-3 py-10 text-center text-muted-foreground">No escalations for these filters.</td></tr>}
             </tbody>
           </table>
         </div>
