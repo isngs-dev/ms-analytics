@@ -12,7 +12,7 @@ import { Lazy } from "@/components/lazy";
 import { useCompare, useOverview, useTimeseries } from "@/lib/hooks";
 import { useFilterStore } from "@/lib/store";
 import { fmtDate, fmtInt } from "@/lib/format";
-import { autoGranularity, GRANULARITIES, GRAN_LABEL, Granularity } from "@/lib/period";
+import { allowedGranularities, autoGranularity, effectiveGranularity, GRANULARITIES, GRAN_LABEL, Granularity } from "@/lib/period";
 import type { Change } from "@/lib/types";
 
 /** The comparison follows the global period filter: the selected period against the one before it. */
@@ -81,8 +81,10 @@ const clip = (from: string, to: string, period?: { from: string; to: string }): 
 /** Every week / month / quarter / year inside the selected range, each compared with the bucket before it. */
 function PeriodByPeriod({ period }: { period?: { from: string; to: string } }) {
   const auto = autoGranularity(period);
+  const filters = useFilterStore((s) => s.filters);
+  const allowed = allowedGranularities(filters, period);
   const [pick, setPick] = useState<CmpGran | null>(null);
-  const g: CmpGran = pick ?? (auto === "day" ? "week" : auto);
+  const g: CmpGran = effectiveGranularity(pick, auto === "day" && allowed.includes("week") ? "week" : auto, allowed);
   const ts = useTimeseries(g);
   const pts = ts.data?.points ?? [];
   const back = BACK[g];
@@ -97,7 +99,7 @@ function PeriodByPeriod({ period }: { period?: { from: string; to: string } }) {
       subtitle={g === "day" ? "Each day in the selected range against the same weekday a week earlier (empty days count as 0)"
         : g === "week" ? "Each Monday–Sunday week in the selected range against the week before it (empty days count as 0)"
         : `Each ${g} in the selected range against the ${g} before it`}
-      action={<Tabs label="Comparison basis" value={g} onChange={setPick} items={CMP_GRANS} />}>
+      action={<Tabs label="Comparison basis" value={g} onChange={setPick} items={CMP_GRANS.map((x) => ({ ...x, disabled: !allowed.includes(x.value), hint: "Longer than the selected period" }))} />}>
       {ts.isError ? <QueryError error={ts.error} /> : ts.isLoading ? <ChartSkeleton h={200} /> : (
         <div className="max-h-[32rem] overflow-auto rounded-xl border">
           <table className="w-full min-w-[46rem] text-left text-sm">
@@ -147,9 +149,10 @@ const METRICS: { key: string; label: string; lessIsBetter?: boolean }[] = [
 export default function TimePage() {
   const ov = useOverview();
   const [gran, setGran] = useState<Granularity | null>(null);
-  const g = gran ?? autoGranularity(ov.data?.period);
-  const ts = useTimeseries(g);
   const filters = useFilterStore((s) => s.filters);
+  const allowed = allowedGranularities(filters, ov.data?.period);
+  const g = effectiveGranularity(gran, autoGranularity(ov.data?.period), allowed);
+  const ts = useTimeseries(g);
   const [against, setAgainst] = useState("prev");
   const base = previousPeriodMode(filters);
   const mode = against === "yoy" ? "yoy"
@@ -167,7 +170,7 @@ export default function TimePage() {
       </PageHeader>
 
       <ChartCard title="Trend" subtitle={ov.data ? `${fmtDate(ov.data.period.from)} – ${fmtDate(ov.data.period.to)}` : undefined}
-        action={<Tabs label="Granularity" value={g} onChange={setGran} items={GRANULARITIES.map((x) => ({ value: x, label: GRAN_LABEL[x] }))} />}>
+        action={<Tabs label="Granularity" value={g} onChange={setGran} items={GRANULARITIES.map((x) => ({ value: x, label: GRAN_LABEL[x], disabled: !allowed.includes(x), hint: "Longer than the selected period" }))} />}>
         {ts.isLoading ? <ChartSkeleton /> : ts.isError ? <QueryError error={ts.error} /> : (
           <TrendChart points={ts.data!.points} granularity={g} keys={["received", "finalised", "qc_completed"]} height={340} />
         )}

@@ -18,7 +18,7 @@ import { useDrill } from "@/lib/drill";
 import { useFilterStore } from "@/lib/store";
 import { hrefWith } from "@/lib/filters";
 import { fmtDate, fmtInt } from "@/lib/format";
-import { autoGranularity, GRANULARITIES, GRAN_LABEL, Granularity } from "@/lib/period";
+import { allowedGranularities, autoGranularity, effectiveGranularity, GRANULARITIES, GRAN_LABEL, Granularity } from "@/lib/period";
 import type { MetricKey } from "@/lib/types";
 
 // The first five are the 3D hero tiles (order matters); any further tile rides in the hero footer.
@@ -33,7 +33,9 @@ const KPIS: { key: MetricKey; label: string; tone: "brand" | "good" | "warn" | "
 export default function OverallPage() {
   const ov = useOverview();
   const [gran, setGran] = useState<Granularity | null>(null);
-  const g = gran ?? autoGranularity(ov.data?.period);
+  const filters = useFilterStore((s) => s.filters);
+  const allowed = allowedGranularities(filters, ov.data?.period);
+  const g = effectiveGranularity(gran, autoGranularity(ov.data?.period), allowed);
   const ts = useTimeseries(g);
   const clients = useBreakdown("client");
   const projects = useBreakdown("project");
@@ -42,7 +44,6 @@ export default function OverallPage() {
   const shownAlerts = (alerts.data?.alerts ?? []).filter((a) => a.type !== "pending_growth");
   const show = useDrill((s) => s.show);
   const patch = useFilterStore((s) => s.patch);
-  const filters = useFilterStore((s) => s.filters);
   const m = ov.data?.metrics;
   const wide = useWide();
 
@@ -72,7 +73,7 @@ export default function OverallPage() {
 
       <div className="mt-4 grid gap-4 xl:grid-cols-3">
         <ChartCard className="xl:col-span-2" title="Activity over time" subtitle="Each line is counted by its own date"
-          action={<Tabs label="Granularity" value={g} onChange={setGran} items={GRANULARITIES.map((x) => ({ value: x, label: GRAN_LABEL[x] }))} />}>
+          action={<Tabs label="Granularity" value={g} onChange={setGran} items={GRANULARITIES.map((x) => ({ value: x, label: GRAN_LABEL[x], disabled: !allowed.includes(x), hint: "Longer than the selected period" }))} />}>
           {ts.isLoading ? <ChartSkeleton /> : ts.isError ? <QueryError error={ts.error} /> : (
             <TrendChart points={ts.data!.points} granularity={g} height={320} />
           )}

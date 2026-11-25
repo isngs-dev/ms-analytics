@@ -89,7 +89,7 @@ export const Skeleton = ({ className }: { className?: string }) => (
 
 export function Tabs<T extends string>({
   value, onChange, items, label,
-}: { value: T; onChange: (v: T) => void; items: { value: T; label: string }[]; label: string }) {
+}: { value: T; onChange: (v: T) => void; items: { value: T; label: string; disabled?: boolean; hint?: string }[]; label: string }) {
   return (
     <div role="tablist" aria-label={label} className="inline-flex flex-wrap gap-1 rounded-xl border bg-card/60 p-1">
       {items.map((i) => (
@@ -97,10 +97,12 @@ export function Tabs<T extends string>({
           key={i.value}
           role="tab"
           aria-selected={value === i.value}
+          disabled={i.disabled}
+          title={i.disabled ? i.hint : undefined}
           onClick={() => onChange(i.value)}
           className={cn(
             "whitespace-nowrap rounded-lg px-3 py-1.5 text-sm transition",
-            value === i.value ? "bg-brand font-medium shadow-glow" : "text-muted-foreground hover:text-foreground",
+            i.disabled ? "cursor-not-allowed text-muted-foreground/40" : value === i.value ? "bg-brand font-medium shadow-glow" : "text-muted-foreground hover:text-foreground",
           )}
         >
           {i.label}
