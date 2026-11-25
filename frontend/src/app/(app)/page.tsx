@@ -16,6 +16,7 @@ import { useWide } from "@/lib/visual";
 import { useAlerts, useBreakdown, useOverview, useTimeseries } from "@/lib/hooks";
 import { useDrill } from "@/lib/drill";
 import { useFilterStore } from "@/lib/store";
+import { hrefWith } from "@/lib/filters";
 import { fmtDate, fmtInt } from "@/lib/format";
 import { autoGranularity, GRANULARITIES, GRAN_LABEL, Granularity } from "@/lib/period";
 import type { MetricKey } from "@/lib/types";
@@ -41,6 +42,7 @@ export default function OverallPage() {
   const shownAlerts = (alerts.data?.alerts ?? []).filter((a) => a.type !== "pending_growth");
   const show = useDrill((s) => s.show);
   const patch = useFilterStore((s) => s.patch);
+  const filters = useFilterStore((s) => s.filters);
   const m = ov.data?.metrics;
   const wide = useWide();
 
@@ -95,7 +97,7 @@ export default function OverallPage() {
         <Card>
           <div className="mb-3 flex items-center justify-between">
             <h2 className="flex items-center gap-2 text-sm font-semibold"><AlertTriangle className="h-4 w-4 text-warn" /> Needs attention</h2>
-            <Link href="/time" className="text-xs text-primary hover:underline">All comparisons</Link>
+            <Link href={hrefWith("/time", filters)} className="text-xs text-primary hover:underline">All comparisons</Link>
           </div>
           {alerts.isLoading ? <ChartSkeleton h={160} /> : shownAlerts.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">No alerts for the last complete month.</p>

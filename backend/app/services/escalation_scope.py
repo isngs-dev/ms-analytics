@@ -3,7 +3,9 @@ so the two can never disagree: an escalation counts when it was raised in the pe
 client / project / editor / QC member / editor-type filters."""
 from __future__ import annotations
 
-from ..models import Escalation
+from sqlalchemy import select
+
+from ..models import Escalation, Form
 from .scope import Scope
 
 
@@ -20,4 +22,12 @@ def where(scope: Scope) -> list:
         c.append(Escalation.qc_member_id == scope.qc_member_id)
     if scope.editor_type:
         c.append(Escalation.editor_type == scope.editor_type)
+    if scope.edit_status or scope.qc_status:
+        # the status filters belong to the form the escalation is about: keep the escalations of forms in that status
+        form = select(Form.id).where(Form.deleted_at.is_(None))
+        if scope.edit_status:
+            form = form.where(Form.edit_status == scope.edit_status)
+        if scope.qc_status:
+            form = form.where(Form.qc_status == scope.qc_status)
+        c.append(Escalation.form_id.in_(form))
     return c

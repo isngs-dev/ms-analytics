@@ -349,6 +349,19 @@ def test_people_endpoints(api, data):
     assert api.get("/api/people/editors/99999", params=JAN).status_code == 404
 
 
+def test_status_filters_apply_to_escalations_through_their_form(api, engine):
+    with Session(engine) as s:
+        f1 = s.query(Form).filter_by(job_id="f1").one()  # edited and "Client Finalized" by QC
+        s.query(Escalation).update({"form_id": f1.id})
+        s.commit()
+    login(api)
+    total = lambda **p: api.get("/api/escalations/summary", params={**JAN, **p}).json()["total"]  # noqa: E731
+    assert total() == 1 and total(qc_status="Client Finalized") == 1 and total(edit_status="Edited & Saved") == 1
+    assert total(qc_status="Rejected") == 0 and total(edit_status="Hold A") == 0
+    rows = api.get("/api/escalations", params={**JAN, "qc_status": "Rejected"}).json()
+    assert rows["total"] == 0 and rows["rows"] == []
+
+
 def test_client_escalation_wording_is_grouped(api, engine, data):
     with Session(engine) as s:
         s.query(Escalation).update({"client_feedback": " DNA Alert "})

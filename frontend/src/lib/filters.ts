@@ -49,6 +49,12 @@ export function serializeFilters(f: Filters): string {
   return sp.toString();
 }
 
+/** A page link that carries the current filters along (a link without them would make the URL -> store sync clear them). */
+export function hrefWith(path: string, f: Filters): string {
+  const qs = serializeFilters(f);
+  return qs ? `${path}?${qs}` : path;
+}
+
 /** Query params for the API (it accepts the same names; client/project ids are lists server-side). */
 export function toApiParams(f: Filters): Record<string, string | number> {
   const out: Record<string, string | number> = {};

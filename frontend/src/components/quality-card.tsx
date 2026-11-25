@@ -7,6 +7,7 @@ import { ChartSkeleton, QueryError } from "./widgets";
 import { useQuality } from "@/lib/hooks";
 import { useDrill } from "@/lib/drill";
 import { useFilterStore } from "@/lib/store";
+import { hrefWith, withPeriodPatch } from "@/lib/filters";
 import { fmtInt } from "@/lib/format";
 
 const pctText = (p: number | null | undefined, d = 1) => (p == null ? "–" : `${p.toFixed(d)}%`);
@@ -55,6 +56,7 @@ export function QualityCard() {
   const show = useDrill((s) => s.show);
   const router = useRouter();
   const patch = useFilterStore((s) => s.patch);
+  const filters = useFilterStore((s) => s.filters);
   const o = q.data?.overall;
   const rows = q.data?.rows ?? [];
 
@@ -78,8 +80,8 @@ export function QualityCard() {
             <Gauge pct={o!.qc_checked_pct} done={o!.qc_done} scope={o!.qc_scope} />
             <div className="grid grid-cols-2 gap-3">
               <Stat label="Waiting for QC" value={fmtInt(o!.qc_pending)} hint="QC step exists, not checked yet" />
-              <Stat label="Client escalations" value={fmtInt(o!.escalated)} onClick={() => router.push("/escalations")}
-                hint="raised in the period, same as the Escalations page" />
+              <Stat label="Client escalations" value={fmtInt(o!.escalated)} onClick={() => router.push(hrefWith("/escalations", filters))}
+                hint="raised in the period · click to open exactly these" />
               <Stat label="Escalation-free" value={pctText(o!.escalation_free_pct, 2)} hint={`${fmtInt(o!.clean)} reports without a client escalation`} />
             </div>
           </div>
@@ -113,7 +115,14 @@ export function QualityCard() {
                         </div>
                       )}
                     </td>
-                    <td className="px-3 py-2 text-right tabular">{fmtInt(r.escalated)}</td>
+                    <td className="px-3 py-2 text-right tabular">
+                      {r.escalated > 0 ? (
+                        <button className="text-primary hover:underline" aria-label={`Open the ${r.escalated} escalations of ${r.name}`}
+                          onClick={() => router.push(hrefWith("/escalations", withPeriodPatch(filters, by === "client" ? { client_id: r.id, project_id: undefined } : { project_id: r.id })))}>
+                          {fmtInt(r.escalated)}
+                        </button>
+                      ) : fmtInt(r.escalated)}
+                    </td>
                     <td className="px-3 py-2 text-right tabular">{pctText(r.escalation_free_pct, 2)}</td>
                   </tr>
                 ))}
