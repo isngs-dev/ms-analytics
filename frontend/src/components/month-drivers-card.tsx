@@ -186,14 +186,14 @@ export function MonthDriversCard() {
                 Compared with {monthName(sel.previous_month, true)}{sel.partial && ", the same first days only"}.
                 {sel.decliner_count > 0 ? <> {sel.decliner_count} project{sel.decliner_count === 1 ? "" : "s"} had forms that fell{sel.decliner_count > sel.decliners.length && ` (top ${sel.decliners.length} shown)`}.</> : null}
               </p>
-              <div className="mt-3 grid gap-4 xl:grid-cols-[3fr_2fr]">
-                <div>
+              <div className="mt-3 grid gap-4 xl:grid-cols-2">
+                <div className="min-w-0">
                   <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-bad">Pulled it down</h4>
                   {sel.decliners.length === 0
                     ? <p className="rounded-xl border p-4 text-center text-sm text-muted-foreground">No project or form fell against the previous month.</p>
                     : <ProjectList rows={sel.decliners} tone="bad" onOpen={(p) => patch({ project_id: p.project_id })} />}
                 </div>
-                <div>
+                <div className="min-w-0">
                   <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-good">Pushed it up</h4>
                   {sel.gainers.length === 0
                     ? <p className="rounded-xl border p-4 text-center text-sm text-muted-foreground">Nothing grew.</p>
