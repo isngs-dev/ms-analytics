@@ -5,7 +5,7 @@ import csv
 import io
 from typing import Iterator
 
-from sqlalchemy import Text, case, cast, func, or_, select
+from sqlalchemy import Text, and_, case, cast, func, literal, or_, select
 from sqlalchemy.orm import Session, aliased
 
 from ..db import SessionLocal
@@ -39,6 +39,8 @@ FORM_COLUMNS = {
     # traceability: every record points back to the Drive document, tab and row it came from
     "source_file": SrcFile.name, "source_tab": SrcSheet.tab_name, "source_row": Form.source_row_no,
     "source_file_id": SrcFile.id, "stage": STAGE,
+    # filled per request from the selected dates (see _expr): does the form's Input Date fall in the period?
+    "received_check": literal(None),
     # every source column that is not part of the standard schema (nothing from the sheet is dropped)
     "other_columns": cast(Form.extra, Text),
 }
@@ -54,14 +56,16 @@ METRIC_COLUMNS = {
     "pending_editing": [*_ID, "shop_date", "received_date", "input_status", "editor", "editor_type",
                         "edit_status", *_SRC],
     "edited": [*_ID, "received_date", "edit_date", "editor", "stage", "edit_status", *_SRC],
-    "finalised": [*_ID, "received_date", "edit_date", "editor", "stage", "edit_status", *_SRC],
-    "processed": [*_ID, "received_date", "edit_date", "editor", "stage", "edit_status", "input_status", *_SRC],
+    "finalised": [*_ID, "received_date", "received_check", "edit_date", "editor", "stage", "edit_status", *_SRC],
+    "processed": [*_ID, "received_date", "received_check", "edit_date", "editor", "stage", "edit_status", "input_status", *_SRC],
     "qc_completed": [*_ID, "edit_date", "qc_date", "editor", "qc_member", "qc_status", "qc_feedback", *_SRC],
     "qc_pending": [*_ID, "received_date", "edit_date", "editor", "edit_status", "qc_member", "qc_status", *_SRC],
 }
 FORM_METRICS = ["received", "edited", "finalised", "processed", "qc_completed", "pending_editing",
                 "qc_pending"]
 EXPORT_LIMIT = 200_000
+# finalised / processed are counted by Transaction Date, received by Input Date: these two list what separates them
+RECONCILED = ("finalised", "processed")
 
 
 class BadRequest(ValueError):
@@ -92,21 +96,62 @@ def _form_filters(db: Session, scope: Scope, metric: str | None, search: str | N
     return where
 
 
+def _received_in_period(scope: Scope):
+    return and_(Form.received_date >= scope.date_from, Form.received_date <= scope.date_to)
+
+
+def _expr(name: str, scope: Scope):
+    """The SQL of a column; 'received_check' depends on the selected dates, so it is built per request."""
+    if name == "received_check":
+        return case((_received_in_period(scope), "Yes"),
+                    (Form.received_date.is_(None), "No – no Input Date"),
+                    (Form.received_date < scope.date_from, "No – received before the period"),
+                    else_="No – received after the period")
+    return FORM_COLUMNS[name]
+
+
 def _pick_columns(columns: list[str] | None, metric: str | None = None) -> list[str]:
-    cols = columns or METRIC_COLUMNS.get(metric or "", DEFAULT_FORM_COLUMNS)
+    cols = list(columns or METRIC_COLUMNS.get(metric or "", DEFAULT_FORM_COLUMNS))
     bad = [c for c in cols if c not in FORM_COLUMNS]
     if bad:
         raise BadRequest(f"unknown columns: {', '.join(bad)}")
+    if metric in RECONCILED and "received_check" not in cols:
+        cols.append("received_check")  # the table highlights the forms that are not part of Received
     return cols
 
 
-def _order(sort: str | None, order: str):
+def _order(sort: str | None, order: str, scope: Scope, metric: str | None = None):
     if sort is None:
-        return [Form.received_date.desc().nulls_last(), Form.id.desc()]
+        first = []
+        if metric in RECONCILED:  # the forms that are not in Received come first, so they are never lost on a late page
+            first = [case((_received_in_period(scope), 1), else_=0).asc()]
+        return [*first, Form.received_date.desc().nulls_last(), Form.id.desc()]
     if sort not in FORM_COLUMNS:
         raise BadRequest(f"unknown sort column '{sort}'")
-    col = FORM_COLUMNS[sort]
+    col = _expr(sort, scope)
     return [(col.desc() if order == "desc" else col.asc()).nulls_last(), Form.id.asc()]
+
+
+def reconcile(db: Session, scope: Scope) -> dict:
+    """Why Finalised (Transaction Date) and Received (Input Date) differ for the same period, in forms."""
+    a, b = scope.date_from, scope.date_to
+    p = metrics.predicates(scope, metrics.status_sets(db))
+    not_received = or_(Form.received_date.is_(None), Form.received_date < a, Form.received_date > b)
+    not_handled = or_(Form.edit_date.is_(None), Form.edit_date < a, Form.edit_date > b)
+    handled = p["processed"]
+    cols = {
+        "finalised": metrics.tally(handled), "received": metrics.tally(p["received"]),
+        "no_input_date": metrics.tally(and_(handled, Form.received_date.is_(None))),
+        "before": metrics.tally(and_(handled, Form.received_date < a)),
+        "after": metrics.tally(and_(handled, Form.received_date > b)),
+        "received_not_finalised": metrics.tally(and_(p["received"], not_handled)),
+    }
+    r = db.execute(_forms_base([v.label(k) for k, v in cols.items()]).where(*metrics.dim_conditions(scope))).mappings().one()
+    r = {k: int(v or 0) for k, v in r.items()}
+    other = r["no_input_date"] + r["before"] + r["after"]
+    return {"finalised": r["finalised"], "received": r["received"], "difference": r["finalised"] - r["received"],
+            "not_received": other, "no_input_date": r["no_input_date"], "received_before": r["before"],
+            "received_after": r["after"], "received_not_finalised": r["received_not_finalised"]}
 
 
 def form_records(db: Session, scope: Scope, metric: str | None, search: str | None, sort: str | None,
@@ -114,20 +159,23 @@ def form_records(db: Session, scope: Scope, metric: str | None, search: str | No
     cols = _pick_columns(columns, metric)
     where = _form_filters(db, scope, metric, search)
     total, units = db.execute(_forms_base([func.count(), func.coalesce(func.sum(Form.units), 0)]).where(*where)).one()
-    q = (_forms_base([FORM_COLUMNS[c].label(c) for c in cols]).where(*where)
-         .order_by(*_order(sort, order)).limit(page_size).offset((page - 1) * page_size))
+    q = (_forms_base([_expr(c, scope).label(c) for c in cols]).where(*where)
+         .order_by(*_order(sort, order, scope, metric)).limit(page_size).offset((page - 1) * page_size))
     rows = [{k: (v.isoformat() if hasattr(v, "isoformat") else v) for k, v in r.items()}
             for r in db.execute(q).mappings()]
-    return {"total": int(total or 0), "total_units": int(units or 0), "page": page, "page_size": page_size, "columns": cols, "rows": rows,
-            "period": {"from": scope.date_from.isoformat(), "to": scope.date_to.isoformat()}}
+    out = {"total": int(total or 0), "total_units": int(units or 0), "page": page, "page_size": page_size, "columns": cols, "rows": rows,
+           "period": {"from": scope.date_from.isoformat(), "to": scope.date_to.isoformat()}}
+    if metric in RECONCILED:
+        out["reconcile"] = reconcile(db, scope)
+    return out
 
 
 def _export_rows(scope: Scope, metric, search, sort, order, cols) -> Iterator[list]:
     # own session: a streaming response outlives the request-scoped one
     with SessionLocal() as db:
         where = _form_filters(db, scope, metric, search)
-        q = (_forms_base([FORM_COLUMNS[c].label(c) for c in cols]).where(*where)
-             .order_by(*_order(sort, order)).limit(EXPORT_LIMIT)
+        q = (_forms_base([_expr(c, scope).label(c) for c in cols]).where(*where)
+             .order_by(*_order(sort, order, scope, metric)).limit(EXPORT_LIMIT)
              .execution_options(yield_per=2000))
         for r in db.execute(q):
             yield [v.isoformat() if hasattr(v, "isoformat") else v for v in r]
@@ -136,7 +184,7 @@ def _export_rows(scope: Scope, metric, search, sort, order, cols) -> Iterator[li
 def export_prepare(db: Session, scope: Scope, metric, search, sort, order, columns):
     cols = _pick_columns(columns, metric)
     _form_filters(db, scope, metric, search)  # validate early, before streaming starts
-    _order(sort, order)
+    _order(sort, order, scope, metric)
     return cols
 
 

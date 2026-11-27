@@ -6,6 +6,7 @@ import { ExternalLink } from "lucide-react";
 import { Modal } from "./ui/dialog";
 import { Input } from "./ui/primitives";
 import { Pager, RecordsTable } from "./data-table";
+import { ReconcileNote } from "./reconcile-note";
 import { api } from "@/lib/api";
 import { useDrill } from "@/lib/drill";
 import { useApiFilters } from "@/lib/hooks";
@@ -51,6 +52,7 @@ export function DrillHost() {
       </div>
       {q.isError ? <p className="py-10 text-center text-bad">Could not load records.</p> : (
         <>
+          {q.data?.reconcile && <ReconcileNote r={q.data.reconcile} />}
           <RecordsTable caption={title} columns={q.data?.columns ?? []} rows={q.data?.rows ?? []} sort={sort} order={order} onSort={toggle} />
           <Pager page={page} pageSize={15} total={q.data?.total ?? 0} onPage={setPage} />
         </>

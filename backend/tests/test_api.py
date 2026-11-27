@@ -410,6 +410,25 @@ def test_qc_pending_ends_when_the_qc_member_changes_the_status(api, engine, data
     assert ids == {"f2", "p3", "p4"}
 
 
+def test_finalised_shows_which_forms_are_not_in_received(api, engine, data):
+    """Finalised counts the Transaction Date, Received the Input Date: the forms that make the gap are flagged and first."""
+    with Session(engine) as s:
+        mk_form(s, data["client"], data["p1"], "nodate", None, D(2026, 1, 14), "Finalized", None, data["ann"])   # no Input Date
+        mk_form(s, data["client"], data["p1"], "early", D(2025, 12, 1), D(2026, 1, 15), "Finalized", None, data["ann"])  # received earlier
+        s.commit()
+    login(api)
+    r = api.get("/api/records/forms", params={**JAN, "metric": "finalised", "page_size": 50}).json()
+    flags = {x["job_id"]: x["received_check"] for x in r["rows"]}
+    assert flags["nodate"] == "No – no Input Date" and flags["early"] == "No – received before the period"
+    assert flags["f1"] == "Yes" and "received_check" in r["columns"]
+    assert {x["job_id"] for x in r["rows"][:3]} == {"early", "nodate", "f4"}  # the three that are not in Received come first
+    rc = r["reconcile"]
+    assert rc["not_received"] == 3 and rc["no_input_date"] == 1 and rc["received_before"] == 2   # f4 was received in Dec too
+    assert rc["difference"] == rc["finalised"] - rc["received"]
+    # a metric that is not about the Transaction Date has no such note
+    assert "reconcile" not in api.get("/api/records/forms", params={**JAN, "metric": "received"}).json()
+
+
 def test_escalations_summary_and_tracking(api):
     login(api, "m")
     sm = api.get("/api/escalations/summary", params=JAN).json()

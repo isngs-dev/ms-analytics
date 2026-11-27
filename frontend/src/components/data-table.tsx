@@ -8,6 +8,8 @@ import { cn } from "@/lib/utils";
 type Row = Record<string, string | number | null>;
 
 const isDateKey = (k: string) => k.endsWith("_date");
+/** A handled form whose Input Date is not in the period: it is in Finalised but not in Received. */
+const notReceived = (r: Row) => typeof r.received_check === "string" && r.received_check.startsWith("No");
 const WIDE = new Set(["comments_to_shopper", "qc_feedback", "client_escalation", "location", "form_name", "other_columns"]);
 
 /** Server-driven table: sorting / paging live in the parent, TanStack Table does the rendering. */
@@ -55,7 +57,8 @@ export function RecordsTable({
         </thead>
         <tbody>
           {table.getRowModel().rows.map((r) => (
-            <tr key={r.id} className="border-t hover:bg-muted/40">
+            <tr key={r.id} className={cn("border-t hover:bg-muted/40", notReceived(r.original) && "bg-warn/15 outline outline-1 -outline-offset-1 outline-warn/60")}
+              title={notReceived(r.original) ? `Finalised in this period but not counted in Received: ${String(r.original.received_check).replace(/^No – /, "")}` : undefined}>
               {r.getVisibleCells().map((c) => (
                 <td key={c.id} className={cn("px-3 py-2 align-top tabular", WIDE.has(c.column.id) ? "max-w-[22rem] truncate" : "whitespace-nowrap")}
                   title={WIDE.has(c.column.id) ? String(c.getValue() ?? "") : undefined}>

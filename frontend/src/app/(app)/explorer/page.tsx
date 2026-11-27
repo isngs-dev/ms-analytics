@@ -6,6 +6,7 @@ import * as Dd from "@radix-ui/react-dropdown-menu";
 import { Check, Columns3, Download } from "lucide-react";
 import { Button, Input, Select } from "@/components/ui/primitives";
 import { Pager, RecordsTable } from "@/components/data-table";
+import { ReconcileNote } from "@/components/reconcile-note";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { ChartCard, PageHeader, QueryError } from "@/components/widgets";
 import { api, buildQuery } from "@/lib/api";
@@ -79,6 +80,7 @@ function Explorer() {
         }>
         {q.isError ? <QueryError error={q.error} /> : (
           <>
+            {q.data?.reconcile && <ReconcileNote r={q.data.reconcile} />}
             <RecordsTable caption="Forms" columns={q.data?.columns ?? []} rows={q.data?.rows ?? []} sort={sort} order={order} onSort={toggleSort} />
             <Pager page={page} pageSize={pageSize} total={q.data?.total ?? 0} onPage={setPage} />
           </>

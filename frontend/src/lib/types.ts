@@ -56,6 +56,13 @@ export interface Me { id: number; email: string; name: string; role: "viewer" | 
 export interface RecordsResp {
   total: number; total_units?: number; page: number; page_size: number; columns: string[]; rows: Record<string, string | number | null>[];
   period: Period;
+  /** Finalised / Processed only: why the count differs from Received for the same period (in forms). */
+  reconcile?: Reconcile;
+}
+export interface Reconcile {
+  finalised: number; received: number; difference: number;
+  not_received: number; no_input_date: number; received_before: number; received_after: number;
+  received_not_finalised: number;
 }
 
 export interface EditorsResp { period: Period; totals: Metrics; editors: BreakRow[]; by_type: BreakRow[] }
