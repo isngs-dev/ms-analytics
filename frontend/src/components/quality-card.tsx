@@ -26,7 +26,7 @@ function Stat({ label, value, hint, onClick }: { label: string; value: string; h
 
 const QC_DEFINITION =
   "Quality checked = of the reports in projects that have a QC step, the share with a QC Date by the period end. "
-  + "Client escalations = the escalations on the Escalations page for the same filters (raised in the period). "
+  + "Client escalations = the client escalations on the Escalations page for the same filters (raised in the period; internal QCD escalations are not counted). "
   + "Escalation-free = reports without a client escalation.";
 
 /** Big gauge: the share of reports that went through quality check. */

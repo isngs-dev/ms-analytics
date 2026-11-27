@@ -3,15 +3,26 @@ so the two can never disagree: an escalation counts when it was raised in the pe
 client / project / editor / QC member / editor-type filters."""
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 
-from ..models import Escalation, Form
+from ..models import DimErrorCategory, Escalation, Form
 from .scope import Scope
 
+# An escalation whose error category is QCD was caught by our own QC: it is an INTERNAL escalation, never one raised by
+# the client. Everything else (Client Error, Missed Instruction, uncategorised ...) is a client escalation.
+INTERNAL_CATEGORY = "qcd"
+KINDS = ("client", "internal", "all")
+_INTERNAL_IDS = select(DimErrorCategory.id).where(func.lower(func.btrim(DimErrorCategory.name)) == INTERNAL_CATEGORY)
 
-def where(scope: Scope) -> list:
+
+def where(scope: Scope, kind: str = "client") -> list:
+    """`kind`: 'client' (the default, so every client-facing figure ignores QCD), 'internal' (QCD only) or 'all'."""
     c = [Escalation.deleted_at.is_(None), Escalation.raised_date >= scope.date_from,
          Escalation.raised_date <= scope.date_to]
+    if kind == "internal":
+        c.append(Escalation.error_category_id.in_(_INTERNAL_IDS))
+    elif kind != "all":
+        c.append(or_(Escalation.error_category_id.is_(None), Escalation.error_category_id.not_in(_INTERNAL_IDS)))
     if scope.client_ids:
         c.append(Escalation.client_id.in_(scope.client_ids))
     if scope.project_ids:

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.etl.sources import InMemorySource
 from app.main import app
-from app.models import (AppUser, DimClient, DimPerson, DimProject, Escalation, Form, Rework)
+from app.models import (AppUser, DimClient, DimErrorCategory, DimPerson, DimProject, Escalation, Form, Rework)
 from app.security import hash_password
 from app.services import records, sync_runner
 from app.services.records import FORM_METRICS
@@ -372,6 +372,28 @@ def test_client_escalation_wording_is_grouped(api, engine, data):
     sm = api.get("/api/escalations/summary", params=JAN).json()
     assert [(g["name"], g["count"]) for g in sm["by_client_escalation"]] == [("DNA Alert", 2), ("Bad Editing", 1)]
     assert sm["with_client_escalation"] == 3 and sm["total"] == 4
+
+
+def test_qcd_escalations_are_internal_and_never_client(api, engine, data):
+    """Error category QCD = caught by our own QC: its own box, and never part of the client escalation figures."""
+    with Session(engine) as s:
+        qcd = DimErrorCategory(name="QCD")
+        s.add(qcd)
+        s.flush()
+        s.add(Escalation(client_id=data["client"].id, project_id=data["p1"].id, job_id="q1", raised_date=D(2026, 1, 24),
+                         client_feedback="iSN", error_category_id=qcd.id, row_hash="qcd1"))
+        s.commit()
+    login(api)
+    get = lambda path, **p: api.get(path, params={**JAN, **p}).json()  # noqa: E731
+    assert get("/api/escalations/summary")["total"] == 1                                 # default = client only
+    assert get("/api/escalations/summary", kind="client")["total"] == 1
+    internal = get("/api/escalations/summary", kind="internal")
+    assert internal["total"] == 1 and internal["by_error_category"][0]["name"] == "QCD"
+    assert get("/api/escalations/summary", kind="all")["total"] == 2
+    assert [r["job_id"] for r in get("/api/escalations", kind="internal")["rows"]] == ["q1"]
+    assert "q1" not in [r["job_id"] for r in get("/api/escalations")["rows"]]
+    assert get("/api/analytics/quality", by="client")["overall"]["escalated"] == 1       # the quality card ignores QCD
+    assert api.get("/api/escalations/summary", params={**JAN, "kind": "bogus"}).status_code == 422
 
 
 def test_escalations_summary_and_tracking(api):

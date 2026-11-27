@@ -6,9 +6,7 @@ import { Badge, Button, Input, Select } from "@/components/ui/primitives";
 import { Modal } from "@/components/ui/dialog";
 import { Pager } from "@/components/data-table";
 import { Breadcrumbs } from "@/components/breadcrumbs";
-import { ChartCard, ChartSkeleton, PageHeader, QueryError } from "@/components/widgets";
-import { KpiHero } from "@/components/kpi-hero";
-import { useWide } from "@/lib/visual";
+import { ChartCard, ChartSkeleton, KpiCard, PageHeader, QueryError } from "@/components/widgets";
 import { RankBars } from "@/components/charts";
 import { api, patch as apiPatch } from "@/lib/api";
 import { useApiFilters, useEscSummary, useMe } from "@/lib/hooks";
@@ -20,8 +18,41 @@ const STATUSES = ["open", "in_progress", "closed"];
 const tone = (s: string) => (s === "closed" ? "good" : s === "in_progress" ? "warn" : "bad");
 const bars = (g?: Group[]) => (g ?? []).map((x) => ({ id: x.id, name: x.name, values: { count: x.count } }));
 
+type Kind = "client" | "internal";
+
+const BOX: Record<Kind, { title: string; blurb: string; empty: string; said: string }> = {
+  client: {
+    title: "Client escalations",
+    blurb: "Raised by the client: every escalation whose error category is not QCD",
+    empty: "No client escalations",
+    said: "What the client said",
+  },
+  internal: {
+    title: "Internal escalations (QCD)",
+    blurb: "Caught by our own QC: escalations whose error category is QCD. They are never counted as client escalations",
+    empty: "No internal escalations",
+    said: "What was noted",
+  },
+};
+
 export default function EscalationsPage() {
-  const sum = useEscSummary();
+  const sum = useEscSummary("client");
+  return (
+    <>
+      <PageHeader title="Escalations"
+        subtitle={sum.data ? `${fmtDate(sum.data.period.from)} – ${fmtDate(sum.data.period.to)} · follows the filters above · client and internal escalations are kept apart` : "Client and internal escalations, root causes and corrective / preventive action tracking"}>
+        <Breadcrumbs />
+      </PageHeader>
+      <EscalationBox kind="client" />
+      <EscalationBox kind="internal" />
+    </>
+  );
+}
+
+/** One self-contained box (its own figures, charts and log) for either client or internal (QCD) escalations. */
+function EscalationBox({ kind }: { kind: Kind }) {
+  const t = BOX[kind];
+  const sum = useEscSummary(kind);
   const f = useApiFilters();
   const patchF = useFilterStore((s) => s.patch);
   const { data: me } = useMe();
@@ -31,29 +62,29 @@ export default function EscalationsPage() {
   const [edit, setEdit] = useState<EscRow | null>(null);
 
   const list = useQuery({
-    queryKey: ["esc-list", f, page, status, search],
-    queryFn: () => api<{ total: number; rows: EscRow[] }>("/escalations", { ...f, page, page_size: 10, action_status: status, search }),
+    queryKey: ["esc-list", kind, f, page, status, search],
+    queryFn: () => api<{ total: number; rows: EscRow[] }>("/escalations", { ...f, kind, page, page_size: 10, action_status: status, search }),
     placeholderData: keepPreviousData,
   });
   const s = sum.data;
-  const wide = useWide();
   const canEdit = me?.role === "manager" || me?.role === "admin";
 
   return (
-    <>
-      <PageHeader title="Escalations" subtitle={s ? `${fmtDate(s.period.from)} – ${fmtDate(s.period.to)} · follows the filters above · root causes and corrective / preventive actions` : "Client escalations, root causes and corrective / preventive action tracking"}>
-        <Breadcrumbs />
-      </PageHeader>
+    <section aria-label={t.title} className="mt-6 rounded-2xl border bg-card/30 p-4 sm:p-5">
+      <div className="mb-4">
+        <h2 className="text-lg font-semibold">{t.title}</h2>
+        <p className="text-sm text-muted-foreground">{t.blurb}</p>
+      </div>
       {sum.isError && <QueryError error={sum.error} />}
-      <KpiHero loading={sum.isLoading} wide={wide} items={[
-        { key: "total", label: "Escalations", tone: "bad", hint: "Raised in period", color: "#b91c1c", value: s?.total },
-        { key: "open", label: "Open", tone: "warn", hint: "Action not closed", color: "#c2410c", value: s?.open },
-        { key: "closed", label: "Closed", tone: "good", hint: "Action closed", color: "#1f7a4d", value: s?.closed },
-      ]} />
+      <section aria-label={`${t.title} figures`} className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <KpiCard label={t.title} tone={kind === "client" ? "bad" : "warn"} hint="Raised in period" loading={sum.isLoading} value={s?.total} />
+        <KpiCard label="Open" tone="warn" hint="Action not closed" loading={sum.isLoading} value={s?.open} />
+        <KpiCard label="Closed" tone="good" hint="Action closed" loading={sum.isLoading} value={s?.closed} />
+      </section>
 
       {s && s.total === 0 && (
         <p role="status" className="mt-4 rounded-xl border bg-card/50 p-4 text-sm text-muted-foreground">
-          No escalations were raised between {fmtDate(s.period.from)} and {fmtDate(s.period.to)} for the selected filters.
+          {t.empty} between {fmtDate(s.period.from)} and {fmtDate(s.period.to)} for the selected filters.
           Only escalations whose date falls in this range are shown; widen the dates or clear a filter to see more.
         </p>
       )}
@@ -71,33 +102,35 @@ export default function EscalationsPage() {
         <ChartCard title="Root causes" subtitle="Normalised text of the Root Cause column">
           {sum.isLoading ? <ChartSkeleton h={200} /> : <RankBars rows={bars(s?.by_root_cause)} keys={["count"]} />}
         </ChartCard>
-        <ChartCard title="Error categories">
-          {sum.isLoading ? <ChartSkeleton h={200} /> : <RankBars rows={bars(s?.by_error_category)} keys={["count"]} />}
-        </ChartCard>
-        <ChartCard title="Escalations by month">
+        {kind === "client" && (
+          <ChartCard title="Error categories">
+            {sum.isLoading ? <ChartSkeleton h={200} /> : <RankBars rows={bars(s?.by_error_category)} keys={["count"]} />}
+          </ChartCard>
+        )}
+        <ChartCard title="By month">
           {sum.isLoading ? <ChartSkeleton h={200} /> : <RankBars rows={bars(s?.by_month)} keys={["count"]} limit={24} />}
         </ChartCard>
       </div>
 
-      <ChartCard className="mt-4" title="Client escalations"
-        subtitle={s ? `What the client said, most repeated first · ${s.with_client_escalation} of ${s.total} escalations carry a client escalation note` : "What the client said, most repeated first"}>
+      <ChartCard className="mt-4" title={t.said}
+        subtitle={s ? `Most repeated first · ${s.with_client_escalation} of ${s.total} carry a note` : "Most repeated first"}>
         {sum.isLoading ? <ChartSkeleton h={240} /> : (s?.by_client_escalation.length ?? 0) === 0
-          ? <p className="py-10 text-center text-sm text-muted-foreground">No client escalation notes for these filters.</p>
+          ? <p className="py-10 text-center text-sm text-muted-foreground">No notes for these filters.</p>
           : <RankBars rows={bars((s?.by_client_escalation ?? []).map((x) => ({ ...x, name: x.name.length > 90 ? `${x.name.slice(0, 88)}…` : x.name })))}
               keys={["count"]} limit={15} />}
       </ChartCard>
 
-      <ChartCard className="mt-4" title="Escalation log"
+      <ChartCard className="mt-4" title={`${t.title} log`}
         action={
           <div className="flex flex-wrap items-end gap-2">
-            <Input placeholder="Search…" aria-label="Search escalations" className="h-9 w-44" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
+            <Input placeholder="Search…" aria-label={`Search ${t.title.toLowerCase()}`} className="h-9 w-44" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
             <Select label="Action status" className="w-36" value={status} onChange={(v) => { setStatus(v); setPage(1); }} options={STATUSES.map((x) => ({ value: x, label: x.replace("_", " ") }))} />
           </div>
         }>
         <div className="overflow-auto rounded-xl border">
           <table className="w-full min-w-[72rem] text-left text-sm">
-            <caption className="sr-only">Escalations</caption>
-            <thead className="bg-muted/80"><tr>{["Date", "Client / project", "Job", "Editor", "Client escalation", "Error category", "Root cause", "Action", "Status", ""].map((h) => <th key={h} scope="col" className="px-3 py-2 font-medium">{h}</th>)}</tr></thead>
+            <caption className="sr-only">{t.title}</caption>
+            <thead className="bg-muted/80"><tr>{["Date", "Client / project", "Job", "Editor", kind === "client" ? "Client escalation" : "Note", "Error category", "Root cause", "Action", "Status", ""].map((h, i) => <th key={i} scope="col" className="px-3 py-2 font-medium">{h}</th>)}</tr></thead>
             <tbody>
               {(list.data?.rows ?? []).map((r) => (
                 <tr key={r.id} className="border-t align-top">
@@ -113,14 +146,14 @@ export default function EscalationsPage() {
                   <td className="px-3 py-2">{canEdit && <Button size="icon" variant="ghost" aria-label={`Update action for escalation ${r.id}`} onClick={() => setEdit(r)}><Pencil className="h-4 w-4" /></Button>}</td>
                 </tr>
               ))}
-              {(list.data?.rows.length ?? 0) === 0 && <tr><td colSpan={10} className="px-3 py-10 text-center text-muted-foreground">No escalations for these filters.</td></tr>}
+              {(list.data?.rows.length ?? 0) === 0 && <tr><td colSpan={10} className="px-3 py-10 text-center text-muted-foreground">{t.empty} for these filters.</td></tr>}
             </tbody>
           </table>
         </div>
         <Pager page={page} pageSize={10} total={list.data?.total ?? 0} onPage={setPage} />
       </ChartCard>
       {edit && <EditDialog row={edit} onClose={() => setEdit(null)} />}
-    </>
+    </section>
   );
 }
 

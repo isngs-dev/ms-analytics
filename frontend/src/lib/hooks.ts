@@ -42,7 +42,8 @@ export const useEditors = () => useFiltered<T.EditorsResp>("editors", "/people/e
 export const useEditorDetail = (id: number | undefined, granularity: string) =>
   useFiltered<T.EditorDetail>("editor", `/people/editors/${id}`, { granularity }, id != null);
 export const useQc = () => useFiltered<T.QcResp>("qc", "/people/qc");
-export const useEscSummary = () => useFiltered<T.EscSummary>("esc-sum", "/escalations/summary");
+export const useEscSummary = (kind: "client" | "internal" = "client") =>
+  useFiltered<T.EscSummary>("esc-sum", "/escalations/summary", { kind });
 export const useFormsCompare = (vs: "previous" | "yoy", enabled = true) =>
   useFiltered<T.FormsCompareResp>("forms-compare", "/analytics/forms-compare", { vs }, enabled);
 export const useMonthDrivers = (metric: string) => useFiltered<T.MonthDriversResp>("month-drivers", "/analytics/month-drivers", { metric });

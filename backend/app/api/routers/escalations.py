@@ -18,7 +18,11 @@ router = APIRouter(prefix="/escalations", tags=["escalations"], dependencies=[vi
 ACTION_STATUSES = ("open", "in_progress", "closed")
 
 
-_where = escalation_scope.where
+Kind = Query("client", pattern="^(client|internal|all)$", description="client = raised by the client, internal = error category QCD")
+
+
+def _where(scope: Scope, kind: str) -> list:
+    return escalation_scope.where(scope, kind)
 
 
 def _group(db: Session, where: list, key, label, joins=()):
@@ -32,8 +36,8 @@ def _group(db: Session, where: list, key, label, joins=()):
 
 @router.get("/summary")
 @cached("summary")
-def summary(scope: Scope = Depends(scope_params), db: Session = Depends(get_db)):
-    where = _where(scope)
+def summary(scope: Scope = Depends(scope_params), kind: str = Kind, db: Session = Depends(get_db)):
+    where = _where(scope, kind)
     Ed = aliased(DimPerson)
     root = func.coalesce(func.nullif(func.lower(func.btrim(Escalation.root_cause)), ""), "(not recorded)")
     total = db.scalar(select(func.count()).select_from(Escalation).where(*where)) or 0
@@ -67,11 +71,11 @@ def summary(scope: Scope = Depends(scope_params), db: Session = Depends(get_db))
 
 
 @router.get("")
-def list_escalations(scope: Scope = Depends(scope_params), search: str | None = None,
+def list_escalations(scope: Scope = Depends(scope_params), kind: str = Kind, search: str | None = None,
                      action_status: str | None = None, page: int = Query(1, ge=1),
                      page_size: int = Query(50, ge=1, le=500), db: Session = Depends(get_db)):
     Ed, Qc = aliased(DimPerson), aliased(DimPerson)
-    where = _where(scope)
+    where = _where(scope, kind)
     if action_status:
         where.append(Escalation.action_status == action_status)
     if search and search.strip():
