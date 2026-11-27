@@ -26,7 +26,7 @@ import type { MetricKey } from "@/lib/types";
 const KPIS: { key: MetricKey; label: string; tone: "brand" | "good" | "warn" | "bad"; hint: string; color: string }[] = [
   { key: "received", label: "Forms received", tone: "brand", hint: "Input Date in period", color: "#1f7a4d" },
   { key: "qc_completed", label: "QC completed", tone: "good", hint: "QC Date in period", color: "#15665a" },
-  { key: "qc_pending", label: "QC pending", tone: "bad", hint: "Handled in period, no QC yet", color: "#b91c1c" },
+  { key: "qc_pending", label: "QC pending", tone: "bad", hint: "Edited & Saved, QC status not changed yet", color: "#b91c1c" },
   { key: "finalised", label: "Finalised", tone: "good", hint: "Handled (Transaction Date) in period", color: "#166534" },
 ];
 

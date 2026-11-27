@@ -6,7 +6,7 @@
   processed        Transaction Date in period (any outcome, incl. hold / incomplete)
   qc_completed     QC Date in period
   pending_editing  received IN the period, not processed by the period end
-  qc_pending       edited IN the period, QC-applicable project, no QC by the period end
+  qc_pending       edited IN the period (Edited & Saved), QC-applicable project, QC status not yet changed by the QC member
 
 Only forms of the selected dates are counted: no backlog from earlier months leaks into a period.
 The same predicates drive the drill-through (records) endpoints, so a count and its rows always agree.
@@ -33,7 +33,7 @@ DEFINITIONS = {
     "processed": "forms with a Transaction Date in the period, any outcome",
     "qc_completed": "forms whose QC Date falls in the period",
     "pending_editing": "received in the period and not processed by the period end",
-    "qc_pending": "edited in the period, in a QC-applicable project, with no QC by the period end",
+    "qc_pending": "left at Edited & Saved in the period, in a QC-applicable project, and the QC member has not changed the QC Status yet",
     # all three are bounded 0-100%, recomputed for whatever period / filters are selected
     "received_handled": "of the forms received in the period, those already handled (Transaction Date) by the period end",
     "received_pending": "of the forms received in the period, those still not handled at the period end (received_handled + received_pending = received)",
@@ -78,6 +78,12 @@ def dim_conditions(scope: Scope) -> list:
     return c
 
 
+def _qc_untouched(sets: StatusSets):
+    """The QC member has not changed the QC Status yet: blank, or still the editor's own "Edited & Saved"."""
+    blank = func.coalesce(func.btrim(Form.qc_status), "") == ""
+    return or_(blank, Form.qc_status.in_(sets.edited)) if sets.edited else blank
+
+
 def predicates(scope: Scope, sets: StatusSets) -> dict[str, Any]:
     a, b = scope.date_from, scope.date_to
     edited_ok = Form.edit_status.in_(sets.edited) if sets.edited else literal(False)
@@ -93,8 +99,12 @@ def predicates(scope: Scope, sets: StatusSets) -> dict[str, Any]:
         # by its end / handled in the period, in a QC project, and not quality-checked by its end.
         "pending_editing": and_(Form.received_date >= a, Form.received_date <= b,
                                 or_(Form.edit_date.is_(None), Form.edit_date > b)),
+        # QC pending = the editor left the form at "Edited & Saved" and the QC member has not touched it yet: the QC
+        # Status is still blank (or still "Edited & Saved"). As soon as the QC member sets any status (Finalized,
+        # Rejected, Completed, Hold ...) it is no longer pending. A QC Date after the period end means it was still
+        # waiting at that time.
         "qc_pending": and_(QC_APPLICABLE.is_(True), edited_ok, Form.edit_date >= a, Form.edit_date <= b,
-                           or_(Form.qc_date.is_(None), Form.qc_date > b)),
+                           or_(and_(Form.qc_date.is_(None), _qc_untouched(sets)), Form.qc_date > b)),
         # cohort: received in the period AND processed by period end
         "cohort_done": and_(Form.received_date >= a, Form.received_date <= b, Form.edit_date.is_not(None),
                             Form.edit_date <= b),

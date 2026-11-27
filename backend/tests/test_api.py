@@ -396,6 +396,20 @@ def test_qcd_escalations_are_internal_and_never_client(api, engine, data):
     assert api.get("/api/escalations/summary", params={**JAN, "kind": "bogus"}).status_code == 422
 
 
+def test_qc_pending_ends_when_the_qc_member_changes_the_status(api, engine, data):
+    """Pending = left at Edited & Saved and the QC Status is still untouched; any status the QC member sets ends it."""
+    with Session(engine) as s:
+        for job, qs in (("p1", "Rejected"), ("p2", "Completed"), ("p3", "Edited & Saved"), ("p4", "  ")):
+            mk_form(s, data["client"], data["p1"], job, D(2026, 1, 10), D(2026, 1, 13), "Edited & Saved", None, data["ann"],
+                    qc_status=qs)
+        s.commit()
+    login(api)
+    jan = lambda: api.get("/api/analytics/overview", params=JAN).json()["metrics"]["qc_pending"]  # noqa: E731
+    assert jan() == 3  # f2 (blank) + p3 (still "Edited & Saved") + p4 (blank); p1 Rejected and p2 Completed are out
+    ids = {r["job_id"] for r in api.get("/api/records/forms", params={**JAN, "metric": "qc_pending", "columns": "job_id"}).json()["rows"]}
+    assert ids == {"f2", "p3", "p4"}
+
+
 def test_escalations_summary_and_tracking(api):
     login(api, "m")
     sm = api.get("/api/escalations/summary", params=JAN).json()
